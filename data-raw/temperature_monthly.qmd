@@ -1,0 +1,177 @@
+---
+title: "temperature_monthly"
+format: html
+editor: source
+---
+
+```{r}
+library(ncdf4)
+library(CopernicusMarine)
+library(tidync)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+```
+
+```{r}
+nwfsc <- readRDS("data-raw/nwfsc_nwfsccombo_age_and_length.rds") |>
+    mutate(time = as.Date(as.numeric(Date), origin = "1970-01-01"))
+
+trawls <- nwfsc |>
+  rename(lon = Longitude_dd) |>
+  rename(lat = Latitude_dd) |>
+  rename(depth = Depth_m) |>
+  group_by(Trawl_id, time, lon, lat, depth) |>
+  summarize(n = n(), .groups = "drop") |> select(-n)
+```
+
+```{r}
+# temp1 <- tidync::tidync(file.choose()) |>
+#   hyper_tibble( force = TRUE) |>
+#   drop_na() |>
+  group_by(longitude,latitude,time)
+
+temp1 <- read_stars(file.choose())
+
+#nc <- nc_open(file.choose())
+
+# Fixed something... don't delete!
+temp1 <- st_as_stars(temp1)
+names(temp1) <- "thetao"
+#dim(temp1[["thetao"]])
+
+```
+
+```{r}
+trilinear_interp <- function(lons, lats, depths, temp_array, xp, yp, zp) {
+  
+  # If trawl is outside the grid, return NA.
+  # Need to test if need this anymore with the redownloaded data
+  if (zp < min(depths) | zp > max(depths)) return(NA)
+  if (xp < min(lons) | xp > max(lons)) return(NA)
+  if (yp < min(lats) | yp > max(lats)) return(NA)
+  
+  # Find surrounding indices
+  x0 <- max(which(lons <= xp))
+  x1 <- min(which(lons >= xp))
+  y0 <- max(which(lats >= yp))
+  y1 <- min(which(lats <= yp)) 
+  z0 <- max(which(depths <= zp))
+  z1 <- min(which(depths >= zp))
+  
+  # If corners are NA, expand depth search until we find data
+  while (all(is.na(c(temp_array[x0, y0, z0], temp_array[x1, y0, z0],
+                      temp_array[x0, y1, z0], temp_array[x1, y1, z0]))) && 
+         z0 < length(depths)) {
+    z0 <- z0 + 1
+  }
+  
+  while (all(is.na(c(temp_array[x0, y0, z1], temp_array[x1, y0, z1],
+                      temp_array[x0, y1, z1], temp_array[x1, y1, z1]))) && 
+         z1 < length(depths)) {
+    z1 <- z1 + 1
+  }
+  
+  # Weights
+  xd <- if (x0 == x1) 0 else (xp - lons[x0]) / (lons[x1] - lons[x0])
+  yd <- if (y0 == y1) 0 else (yp - lats[y0]) / (lats[y1] - lats[y0])
+  zd <- if (z0 == z1) 0 else (zp - depths[z0]) / (depths[z1] - depths[z0])
+  
+  # 8 surrounding values
+  c000 <- temp_array[x0, y0, z0]
+  c100 <- temp_array[x1, y0, z0]
+  c010 <- temp_array[x0, y1, z0]
+  c110 <- temp_array[x1, y1, z0]
+  c001 <- temp_array[x0, y0, z1]
+  c101 <- temp_array[x1, y0, z1]
+  c011 <- temp_array[x0, y1, z1]
+  c111 <- temp_array[x1, y1, z1]
+  
+  # Return NA if any corner is NA
+  # if (any(is.na(c(c000, c100, c010, c110, c001, c101, c011, c111)))) return(NA)
+  
+  corners <- c(c000, c100, c010, c110, c001, c101, c011, c111)
+  if (all(is.na(corners))) return(NA)
+  if (any(is.na(corners))) {
+    # fall back to mean of non-NA corners
+    return(mean(corners, na.rm = TRUE))
+  }
+  
+  # Interpolate along x
+  c00 <- c000 * (1 - xd) + c100 * xd
+  c01 <- c001 * (1 - xd) + c101 * xd
+  c10 <- c010 * (1 - xd) + c110 * xd
+  c11 <- c011 * (1 - xd) + c111 * xd
+  
+  # Interpolate along y
+  c0 <- c00 * (1 - yd) + c10 * yd
+  c1 <- c01 * (1 - yd) + c11 * yd
+  
+  # Interpolate along z
+  c0 * (1 - zd) + c1 * zd
+}
+```
+
+```{r}
+# Get the lon, lat, and depth grids
+# Offset is the start, delta is the distance between points
+lons <- st_dimensions(temp1)$x$offset +
+        st_dimensions(temp1)$x$delta *
+        (seq_len(st_dimensions(temp1)$x$to) - 1)
+
+lats <- st_dimensions(temp1)$y$offset +
+        st_dimensions(temp1)$y$delta *
+        (seq_len(st_dimensions(temp1)$y$to) - 1)
+
+depths <- abs(as.numeric(st_dimensions(temp1)$depth$values$start))
+
+
+# Empty data frame for joined data
+joined <- data.frame()
+
+
+# Iteration
+begin <- Sys.time()
+for (year in 2003:2023) {
+  
+  message("Processing ", year)
+  trawls_year <- trawls |> filter(format(time, "%Y") == year)
+  if (nrow(trawls_year) == 0) next
+  
+  for (month in 1:12) {
+    
+    trawls_month <- trawls_year |>
+      filter(format(time, "%m") == sprintf("%02d", month))
+    
+    if (nrow(trawls_month) == 0) next
+    
+    time_idx <- (year - 2003) * 12 + month
+    
+    temp_slice <- temp1[["thetao"]][,,,time_idx]
+    #temp_slice <- temp_slice[,,rev(seq_len(dim(temp_slice)[[3]]))]    
+    j <- trawls_month |>
+      rowwise() |>
+      mutate(
+        temp = trilinear_interp(lons, lats, depths, temp_slice, lon, lat, depth),
+        temp_month = format(time, "%Y-%m")
+      ) |>
+      ungroup()
+    
+    joined <- rbind(joined, j)
+  }
+  
+  message("Done ", year)
+  gc()
+}
+
+Sys.time() - begin
+```
+
+```{r}
+ggplot() +
+  geom_stars(data = temp1[,,,1,1]) +  # first time and depth slice
+  geom_sf(data = trawl_sf, color = "red", size = 0.01) +
+  coord_sf(xlim = c(-126, -117), ylim = c(32, 49))
+
+```
+
