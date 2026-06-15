@@ -1,0 +1,7 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+data-raw/glorys/glorys_nwfsc.nc
+data-raw/glorys/glorys_pbs.nc
+data-raw/glorys/glorys_afsc.nc
