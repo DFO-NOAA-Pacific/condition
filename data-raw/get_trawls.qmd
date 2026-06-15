@@ -1,0 +1,59 @@
+---
+title: "get_trawls"
+format: html
+editor: source
+---
+
+```{r}
+library(nwfscSurvey)
+library(dplyr)
+```
+
+```{r}
+# Get trawls from US west coast ~13,000
+nwfsc <- nwfscSurvey::pull_bio(
+  survey = "NWFSC.Combo", 
+  years = c(2003, 2023))
+
+nwfsc <- nwfsc |>
+  mutate(time = as.Date(as.numeric(Date), origin = "1970-01-01"))
+
+trawls <- nwfsc |>
+  rename(lon = Longitude_dd) |>
+  rename(lat = Latitude_dd) |>
+  rename(depth = Depth_m) |>
+  group_by(Trawl_id, time, lon, lat, depth) |>
+  summarize(n = n(), .groups = "drop") |> select(-n)
+
+write.csv(trawls, "trawls/trawls_nwfsc.csv")
+```
+
+```{r}
+# Get trawls from BC ~7,000
+download.file("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-db/main/data-raw/pbs-haul.rds", destfile = "./trawls/trawls_pbs.rds", mode = "wb")
+
+trawls_pbs <- readRDS("./trawls/trawls_pbs.rds")
+trawls_pbs <- trawls_pbs |>
+  mutate(time = as.Date(date)) |>
+  rename(Trawl_id = event_id, lon = lon_start, lat = lat_start, depth = depth_m) |>
+  group_by(Trawl_id, time, lon, lat, depth) |>
+  summarize(n = n()) |> select(-n)
+saveRDS(trawls_pbs, "./trawls/trawls_pbs.rds")
+```
+
+```{r}
+# Get trawls from Alaska ~34,800 
+# No lat/lon/time/depth information
+
+download.file("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-data/main/afsc-haul.rds", destfile = "./trawls/trawls_afsc.rds", mode = "wb")
+
+trawls_afsc <- readRDS("./trawls/trawls_afsc.rds")
+
+trawls_afsc <- trawls_afsc |>
+  mutate(time = as.Date(date)) |>
+  rename(Trawl_id = event_id, lon = lon_start, lat = lat_start, depth = depth_m) |>
+  group_by(Trawl_id, time, lon, lat, depth) |>
+  summarize(n = n()) |> select(-n)
+saveRDS(trawls_afsc, "./trawls/trawls_afsc.rds")
+```
+
