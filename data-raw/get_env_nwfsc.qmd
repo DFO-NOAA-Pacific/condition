@@ -1,0 +1,198 @@
+---
+title: "get_env_nwfsc"
+format: html
+editor: source
+---
+
+```{r}
+library(tidync)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(units)
+library(stars)
+library(nwfscSurvey)
+```
+
+```{r}
+# Environmental data
+glorys <- read_stars(file.choose())
+glorys <- st_as_stars(glorys)
+
+# Trawl data
+nwfsc <- nwfscSurvey::pull_bio(
+  survey = "NWFSC.Combo", 
+  years = c(2003, 2023))
+nwfsc <- nwfsc |>
+  mutate(time = as.Date(as.numeric(Date), origin = "1970-01-01"))
+trawls_nwfsc <- nwfsc |>
+  rename(lon = Longitude_dd) |>
+  rename(lat = Latitude_dd) |>
+  rename(depth = Depth_m) |>
+  group_by(Trawl_id, time, lon, lat, depth) |>
+  summarize(n = n(), .groups = "drop") |> select(-n) |>
+  mutate(time = as.Date(time, origin = "1970-01-01"))
+
+# Specimen data
+spp_list <- data.frame(common_name = c("sablefish", "arrowtooth flounder", "dover sole", "shortspine thornyhead", "longspine thornyhead", "pacific ocean perch"))
+fishies <- nwfscSurvey::pull_bio(
+  common_name = spp_list$common_name, 
+  survey = "NWFSC.Combo", 
+  years = c(2003, 2023))
+fishies_clean <- fishies |>
+  filter(!is.na(Length_cm), !is.na(Weight), !is.na(Year), Length_cm > 0, Weight > 0)
+
+```
+
+```{r}
+# Interpolation function
+trilinear_interp <- function(lons, lats, depths, arr, xp, yp, zp) {
+  
+  if (xp < min(lons) | xp > max(lons)) return(NA)
+  if (yp < min(lats) | yp > max(lats)) return(NA)
+  if (zp < min(depths) | zp > max(depths)) return(NA)
+  
+  # Find surrounding indices
+  x0 <- max(which(lons <= xp)) # lower longitude: returns max of all the indices lower than the trawl longitude
+  x1 <- min(which(lons >= xp))
+  y0 <- max(which(lats >= yp))
+  y1 <- min(which(lats <= yp)) 
+  z0 <- max(which(depths <= zp))
+  z1 <- min(which(depths >= zp))
+  
+  # 8 surrounding values - the corners of the cube
+  c000 <- arr[x0, y0, z0]
+  c100 <- arr[x1, y0, z0]
+  c010 <- arr[x0, y1, z0]
+  c110 <- arr[x1, y1, z0]
+  c001 <- arr[x0, y0, z1]
+  c101 <- arr[x1, y0, z1]
+  c011 <- arr[x0, y1, z1]
+  c111 <- arr[x1, y1, z1]
+  corners <- c(c000, c100, c010, c110, c001, c101, c011, c111)
+  
+  # If all corners are NA, snap to nearest distance
+  if (all(is.na(corners))) {
+    indices <- which(!is.na(arr), arr.ind = TRUE)
+
+    distances <- (indices[,1] - x0)^2 + (indices[,2] - y0)^2 + (indices[,3] - z0)^2
+
+    closest_index <- indices[which.min(distances),]
+
+    return(arr[closest_index[1], closest_index[2], closest_index[3]])
+  }
+
+  # If some corners are na, use the mean of the others
+  if (any(is.na(corners))) {
+    return(mean(corners, na.rm = TRUE))
+  }
+
+  # Weights
+  xd <- if (x0 == x1) 0 else (xp - lons[x0]) / (lons[x1] - lons[x0])
+  yd <- if (y0 == y1) 0 else (yp - lats[y0]) / (lats[y1] - lats[y0])
+  zd <- if (z0 == z1) 0 else (zp - depths[z0]) / (depths[z1] - depths[z0])
+  
+  # Interpolate along x
+  c00 <- c000 * (1 - xd) + c100 * xd
+  c01 <- c001 * (1 - xd) + c101 * xd
+  c10 <- c010 * (1 - xd) + c110 * xd
+  c11 <- c011 * (1 - xd) + c111 * xd
+  
+  # Interpolate along y
+  c0 <- c00 * (1 - yd) + c10 * yd
+  c1 <- c01 * (1 - yd) + c11 * yd
+  
+  # Interpolate along z
+  c0 * (1 - zd) + c1 * zd
+}
+
+```
+
+```{r}
+# Get the lon, lat vectors. Only have to generate once since temp and salinity are from the same product.
+# Offset is the longitude minimum, delta is the distance between points which multiplies with the number of x/y points
+# Eg. -126.3 + 0.083*(0, 1, 2, 3...109)
+lons <- st_dimensions(glorys)$x$offset + 
+        st_dimensions(glorys)$x$delta *
+        (seq_len(st_dimensions(glorys)$x$to) - 1)
+
+lats <- st_dimensions(glorys)$y$offset +
+        st_dimensions(glorys)$y$delta *
+        (seq_len(st_dimensions(glorys)$y$to) - 1)
+
+# Depth vector can just be extracted from the stars dimensions
+depths <- as.numeric(st_dimensions(glorys)$depth$values$start)
+
+
+# Empty data frame for joined data
+joined <- data.frame()
+
+
+# Iteration over years and months, calling the interpolation function for each haul - temp and salinity
+begin <- Sys.time()
+for (year in 2003:2023) {
+  
+  message("Processing ", year)
+  trawls_year <- trawls_nwfsc |> filter(format(time, "%Y") == year)
+  if (nrow(trawls_year) == 0) message("No data: ", year) & next
+  
+  for (month in 1:12) {
+    
+    # Filter hauls to month (ensuring leading zeroes) and skip non-trawling months
+    trawls_month <- trawls_year |>
+      filter(format(time, "%m") == sprintf("%02d", month))
+    if (nrow(trawls_month) == 0) next
+    
+    # Get the number of months since 2003
+    time_index <- (year - 2003) * 12 + month
+    
+    # Extract that month's temperature. [lon, lat, depth, time] gets 3d raster at a particular time
+    temp_slice <- glorys[["thetao"]][,,,time_index] 
+    salinity_slice <- glorys[["so"]][,,,time_index]
+    o2_slice <- glorys[["o2"]][,,,time_index]
+    phyto_slice <- glorys[["phyc"]][,,,time_index]
+    npp_slice <- glorys[["nppv"]][,,,time_index]
+    
+    results <- trawls_month |>
+      rowwise() |>
+      mutate(temp = trilinear_interp(lons, lats, depths, temp_slice, lon, lat, depth),
+             salinity = trilinear_interp(lons, lats, depths, salinity_slice, lon, lat, depth),
+             o2 = trilinear_interp(lons, lats, depths, o2_slice, lon, lat, depth),
+             phyto = trilinear_interp(lons, lats, depths, phyto_slice, lon, lat, depth),
+             npp = trilinear_interp(lons, lats, depths, npp_slice, lon, lat, depth),
+             
+      ) |>
+      ungroup()
+    
+    joined <- rbind(joined, results)
+  }
+  
+  gc()
+}
+
+Sys.time() - begin
+
+```
+
+```{r}
+# Housekeeping and cleaning environmental data
+rm(results, trawls_month, trawls_year, time_index, temp_slice, salinity_slice, phyto_slice, npp_slice, o2_slice, month, year, begin)
+
+joined_clean <- joined |>
+  select(Trawl_id, temp, salinity, o2, phyto, npp) |>
+  mutate(temp = drop_units(temp),
+         o2 = drop_units(o2),
+         phyto = drop_units(phyto),
+         npp = drop_units(npp))
+
+# Join environmental data with specimen data by trawl id
+fishies_plus <- left_join(fishies_clean, joined_clean, by = join_by(Trawl_id))
+
+write.csv(fishies_plus, "fish_nwfsc.csv")
+```
+
+```{r}
+#trawls_nwfsc_plus <- read.csv("trawls_nwfsc_plus.csv", colClasses = c(Trawl_id = "character"))
+
+```
+
