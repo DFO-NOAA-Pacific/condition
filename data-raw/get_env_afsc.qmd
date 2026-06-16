@@ -1,17 +1,15 @@
 ---
-title: "get_env_nwfsc"
+title: "get_env_afsc"
 format: html
 editor: source
 ---
-
 ```{r}
 library(tidync)
 library(dplyr)
 library(tidyr)
 library(lubridate)
-library(units)
 library(stars)
-library(nwfscSurvey)
+library(units)
 ```
 
 ```{r}
@@ -20,34 +18,38 @@ glorys <- read_stars(file.choose())
 glorys <- st_as_stars(glorys)
 
 # Trawl data
-nwfsc <- nwfscSurvey::pull_bio(
-  survey = "NWFSC.Combo", 
-  years = c(2003, 2023))
-nwfsc <- nwfsc |>
-  mutate(time = as.Date(as.numeric(Date), origin = "1970-01-01"))
-trawls_nwfsc <- nwfsc |>
-  rename(lon = Longitude_dd) |>
-  rename(lat = Latitude_dd) |>
-  rename(depth = Depth_m) |>
-  group_by(Trawl_id, time, lon, lat, depth) |>
-  summarize(n = n(), .groups = "drop") |> select(-n) |>
-  mutate(time = as.Date(time, origin = "1970-01-01"))
+trawls_afsc <- readRDS("./trawls/trawls_afsc.rds")
 
 # Specimen data
 spp_list <- data.frame(common_name = c("sablefish", "arrowtooth flounder", "dover sole", "shortspine thornyhead", "longspine thornyhead", "pacific ocean perch"))
-fishies <- nwfscSurvey::pull_bio(
-  common_name = spp_list$common_name, 
-  survey = "NWFSC.Combo", 
-  years = c(2003, 2023))
-fishies_clean <- fishies |>
-  filter(!is.na(Length_cm), !is.na(Weight), !is.na(Year), Length_cm > 0, Weight > 0)
+
+download.file("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-db/main/data-raw/afsc-specimen.rds", destfile = "./afsc_specimen.rds", mode = "wb")
+
+download.file("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-db/main/MasterSpeciesTableWithAphiaID.csv", destfile = "./afsc_dictionary.csv", mode = "wb")
+
+afsc_specimen <- readRDS("afsc_specimen.rds")
+afsc_dictionary <- read.csv("afsc_dictionary.csv")
+afsc_dictionary <- afsc_dictionary |>
+  rename(itis = TSN) |>
+  group_by(itis) |>
+  summarize(scientific_name = raw_species[1],
+                   common_name = raw_common[1])
+
+combination <- left_join(afsc_specimen, afsc_dictionary, by = "itis") |>
+  select(-scientific_name.y) |>
+  select(-common_name.y) |>
+  rename(scientific_name = scientific_name.x, common_name = common_name.x)
+
+afsc_subset <- combination |>
+  filter(common_name %in% spp_list$common_name) |>
+  rename(Trawl_id = event_id)
 
 ```
 
 ```{r}
 # Interpolation function
 trilinear_interp <- function(lons, lats, depths, arr, xp, yp, zp) {
-  
+  if (is.na(xp) | is.na(yp) | is.na(zp)) return(NA)
   if (xp < min(lons) | xp > max(lons)) return(NA)
   if (yp < min(lats) | yp > max(lats)) return(NA)
   if (zp < min(depths) | zp > max(depths)) return(NA)
@@ -128,12 +130,12 @@ depths <- as.numeric(st_dimensions(glorys)$depth$values$start)
 joined <- data.frame()
 
 
-# Iteration over years and months, calling the interpolation function for each haul - temp, so, npp, phyto, o2
+# Iteration over years and months
 begin <- Sys.time()
 for (year in 2003:2023) {
   
   message("Processing ", year)
-  trawls_year <- trawls_nwfsc |> filter(format(time, "%Y") == year)
+  trawls_year <- trawls_afsc |> filter(format(time, "%Y") == year)
   if (nrow(trawls_year) == 0) message("No data: ", year) & next
   
   for (month in 1:12) {
@@ -175,9 +177,7 @@ Sys.time() - begin
 ```
 
 ```{r}
-# Housekeeping and cleaning environmental data
-rm(results, trawls_month, trawls_year, time_index, temp_slice, salinity_slice, phyto_slice, npp_slice, o2_slice, month, year, begin)
-
+# Cleaning environmental data
 joined_clean <- joined |>
   select(Trawl_id, temp, salinity, o2, phyto, npp) |>
   mutate(temp = drop_units(temp),
@@ -185,14 +185,12 @@ joined_clean <- joined |>
          phyto = drop_units(phyto),
          npp = drop_units(npp))
 
-# Join environmental data with specimen data by trawl id
-fishies_plus <- left_join(fishies_clean, joined_clean, by = join_by(Trawl_id))
+# Join environmental data with specimen data by trawl id, housekeeping
+fishies_plus <- left_join(afsc_subset, joined_clean, by = join_by(Trawl_id))
+write.csv(fishies_plus, "fish_afsc.csv")
 
-write.csv(fishies_plus, "fish_nwfsc.csv")
+#file.remove("pbs_catch.rds")
+rm(results, trawls_month, trawls_year, time_index, temp_slice, salinity_slice, phyto_slice, npp_slice, o2_slice, month, year, begin)
 ```
 
-```{r}
-#trawls_nwfsc_plus <- read.csv("trawls_nwfsc_plus.csv", colClasses = c(Trawl_id = "character"))
-
-```
 

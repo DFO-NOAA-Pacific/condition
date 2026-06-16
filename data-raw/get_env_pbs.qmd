@@ -117,7 +117,7 @@ depths <- as.numeric(st_dimensions(glorys)$depth$values$start)
 joined <- data.frame()
 
 
-# Iteration over years and months, calling the interpolation function for each haul - temp and salinity
+# Iteration over years and months
 begin <- Sys.time()
 for (year in 2003:2023) {
   
