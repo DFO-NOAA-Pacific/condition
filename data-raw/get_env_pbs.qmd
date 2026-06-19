@@ -5,6 +5,11 @@ editor: source
 ---
 
 ```{r}
+# Note: there are 17 trawls with no depth which explain NAs in the final product
+```
+
+
+```{r}
 library(tidync)
 library(dplyr)
 library(tidyr)
@@ -15,31 +20,37 @@ library(units)
 
 ```{r}
 # Environmental data
-glorys <- read_stars(file.choose())
+glorys <- read_stars("glorys/glorys_pbs.nc")
 glorys <- st_as_stars(glorys)
+
+# temp1 <- tidync::tidync("glorys/glorys_pbs.nc") |>
+#   hyper_tibble( force = TRUE) |>
+#   drop_na() |>
+#   group_by(longitude,latitude,time)
 
 # Trawl data
 trawls_pbs <- readRDS("./trawls/trawls_pbs.rds")
 
 # Specimen data
-spp_list <- data.frame(common_name = c("sablefish", "arrowtooth flounder", "dover sole", "shortspine thornyhead", "longspine thornyhead", "pacific ocean perch"))
+spp_list <- data.frame(common_name = c("sablefish", "arrowtooth flounder", "dover sole", "shortspine thornyhead", "longspine thornyhead", "pacific ocean perch", "north pacific spiny dogfish"))
 
-download.file("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-db/main/data-raw/pbs-catch-all.rds", destfile = "./pbs_catch.rds", mode = "wb")
+pbs_data <- readRDS(url("https://raw.githubusercontent.com/DFO-NOAA-Pacific/fishyplots/main/data-raw/pbs-gfdata.rds"))
 
-pbs_catch <- readRDS("pbs_catch.rds")
-pbs_catch <- pbs_catch |>
-  filter(species_common_name %in% spp_list$common_name) |>
-  rename(Trawl_id = event_id)
-
+pbs_bio <- do.call(rbind, lapply(spp_list$common_name,function(spec){ #have to use common name
+     df <- pbs_data[[spec]]$survey_samples #pull $survey_samples df from each species
+     return(df)})) |> #apply function to each species data in list, bind together
+      dplyr::filter(usability_code %in% c(0, 1, 2, 6)) |>  #filter for usability codes
+      dplyr::rename(Trawl_id = fishing_event_id)
+rm(pbs_data)
 ```
 
 ```{r}
 # Interpolation function
 trilinear_interp <- function(lons, lats, depths, arr, xp, yp, zp) {
-  if (is.na(xp) | is.na(yp) | is.na(zp)) return(NA)
-  if (xp < min(lons) | xp > max(lons)) return(NA)
-  if (yp < min(lats) | yp > max(lats)) return(NA)
-  if (zp < min(depths) | zp > max(depths)) return(NA)
+  if (is.na(xp) | is.na(yp) | is.na(zp)) message("check1") & return(NA)
+  if (xp < min(lons) | xp > max(lons)) message("check2") & return(NA)
+  if (yp < min(lats) | yp > max(lats)) message("check3") & return(NA)
+  if (zp < min(depths) | zp > max(depths)) message("check4") & return(NA)
   
   # Find surrounding indices
   x0 <- max(which(lons <= xp)) # lower longitude: returns max of all the indices lower than the trawl longitude
@@ -164,19 +175,17 @@ Sys.time() - begin
 ```
 
 ```{r}
-# Cleaning environmental data
+# Join environmental data
 joined_clean <- joined |>
-  select(Trawl_id, temp, salinity, o2, phyto, npp) |>
   mutate(temp = drop_units(temp),
          o2 = drop_units(o2),
          phyto = drop_units(phyto),
          npp = drop_units(npp))
 
-# Join environmental data with specimen data by trawl id, housekeeping
-fishies_plus <- left_join(pbs_catch, joined_clean, by = join_by(Trawl_id))
-write.csv(fishies_plus, "fish_pbs.csv")
+fishies_plus <- left_join(pbs_bio, joined_clean, by = join_by(Trawl_id))
+saveRDS(fishies_plus, "fish_pbs.rds")
 
-file.remove("pbs_catch.rds")
-rm(results, trawls_month, trawls_year, time_index, temp_slice, salinity_slice, phyto_slice, npp_slice, o2_slice, month, year, begin)
+# Housekeeping
+rm(results, trawls_month, trawls_year, time_index, temp_slice, salinity_slice, phyto_slice, npp_slice, o2_slice, month, year, begin, joined, joined_clean, fishies_plus, glorys, pbs_data, pbs_bio)
 ```
 

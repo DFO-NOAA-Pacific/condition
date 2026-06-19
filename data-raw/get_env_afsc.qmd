@@ -14,21 +14,19 @@ library(units)
 
 ```{r}
 # Environmental data
-glorys <- read_stars(file.choose())
+glorys <- read_stars("glorys/glorys_afsc.nc")
 glorys <- st_as_stars(glorys)
 
 # Trawl data
 trawls_afsc <- readRDS("./trawls/trawls_afsc.rds")
 
 # Specimen data
-spp_list <- data.frame(common_name = c("sablefish", "arrowtooth flounder", "dover sole", "shortspine thornyhead", "longspine thornyhead", "pacific ocean perch"))
+spp_list <- data.frame(common_name = c("sablefish", "arrowtooth flounder", "dover sole", "shortspine thornyhead", "longspine thornyhead", "pacific ocean perch", "pacific spiny dogfish"))
 
 download.file("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-db/main/data-raw/afsc-specimen.rds", destfile = "./afsc_specimen.rds", mode = "wb")
-
-download.file("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-db/main/MasterSpeciesTableWithAphiaID.csv", destfile = "./afsc_dictionary.csv", mode = "wb")
-
+afsc_dictionary <- read.csv("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-db/main/MasterSpeciesTableWithAphiaID.csv")
 afsc_specimen <- readRDS("afsc_specimen.rds")
-afsc_dictionary <- read.csv("afsc_dictionary.csv")
+
 afsc_dictionary <- afsc_dictionary |>
   rename(itis = TSN) |>
   group_by(itis) |>
@@ -39,6 +37,10 @@ combination <- left_join(afsc_specimen, afsc_dictionary, by = "itis") |>
   select(-scientific_name.y) |>
   select(-common_name.y) |>
   rename(scientific_name = scientific_name.x, common_name = common_name.x)
+combination$common_name[combination$common_name == "Dover sole"] <- "dover sole"
+combination$common_name[combination$common_name == "Pacific ocean perch"] <- "pacific ocean perch"
+combination$common_name[combination$common_name == "spiny dogfish"] <- "pacific spiny dogfish"
+file.remove("afsc_specimen.rds")
 
 afsc_subset <- combination |>
   filter(common_name %in% spp_list$common_name) |>
@@ -177,19 +179,17 @@ Sys.time() - begin
 ```
 
 ```{r}
-# Cleaning environmental data
+# Join environmental data
 joined_clean <- joined |>
-  select(Trawl_id, temp, salinity, o2, phyto, npp) |>
   mutate(temp = drop_units(temp),
          o2 = drop_units(o2),
          phyto = drop_units(phyto),
          npp = drop_units(npp))
 
-# Join environmental data with specimen data by trawl id, housekeeping
 fishies_plus <- left_join(afsc_subset, joined_clean, by = join_by(Trawl_id))
-write.csv(fishies_plus, "fish_afsc.csv")
+saveRDS(fishies_plus, "fish_afsc.rds")
 
-#file.remove("pbs_catch.rds")
+# Housekeeping
 rm(results, trawls_month, trawls_year, time_index, temp_slice, salinity_slice, phyto_slice, npp_slice, o2_slice, month, year, begin)
 ```
 

@@ -11,46 +11,49 @@ library(tidyr)
 library(lubridate)
 library(units)
 library(stars)
-library(nwfscSurvey)
 ```
 
 ```{r}
 # Environmental data
-glorys <- read_stars(file.choose())
+glorys <- read_stars("glorys/glorys_nwfsc.nc")
 glorys <- st_as_stars(glorys)
 
 # Trawl data
-nwfsc <- nwfscSurvey::pull_bio(
-  survey = "NWFSC.Combo", 
-  years = c(2003, 2023))
-nwfsc <- nwfsc |>
-  mutate(time = as.Date(as.numeric(Date), origin = "1970-01-01"))
-trawls_nwfsc <- nwfsc |>
+nwfsc_combo <- readRDS(url("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-db/main/data-raw/nwfsc_nwfsccombo_age_and_length.rds"))
+
+trawls_nwfsc <- nwfsc_combo |>
+  mutate(time = as.Date(Datetime_utc_iso)) |>
   rename(lon = Longitude_dd) |>
   rename(lat = Latitude_dd) |>
   rename(depth = Depth_m) |>
   group_by(Trawl_id, time, lon, lat, depth) |>
-  summarize(n = n(), .groups = "drop") |> select(-n) |>
-  mutate(time = as.Date(time, origin = "1970-01-01"))
+  summarize(n = n(), .groups = "drop") |> select(-n)
 
 # Specimen data
-spp_list <- data.frame(common_name = c("sablefish", "arrowtooth flounder", "dover sole", "shortspine thornyhead", "longspine thornyhead", "pacific ocean perch"))
-fishies <- nwfscSurvey::pull_bio(
-  common_name = spp_list$common_name, 
-  survey = "NWFSC.Combo", 
-  years = c(2003, 2023))
+spp_list <- data.frame(common_name = c("sablefish", "arrowtooth flounder", "dover sole", "shortspine thornyhead", "longspine thornyhead", "pacific ocean perch", "pacific spiny dogfish"))
+
+nwfsc_combo$Common_name[nwfsc_combo$Common_name == "Dover sole"] <- "dover sole"
+nwfsc_combo$Common_name[nwfsc_combo$Common_name == "Pacific ocean perch"] <- "pacific ocean perch"
+nwfsc_combo$Common_name[nwfsc_combo$Common_name == "Pacific spiny dogfish"] <- "pacific spiny dogfish"
+
+fishies <- nwfsc_combo |>
+  filter(Common_name %in% spp_list$common_name, Year >= 2003, Year <= 2023)
+
 fishies_clean <- fishies |>
   filter(!is.na(Length_cm), !is.na(Weight), !is.na(Year), Length_cm > 0, Weight > 0)
-
+rm(nwfsc_combo)
 ```
 
 ```{r}
 # Interpolation function
 trilinear_interp <- function(lons, lats, depths, arr, xp, yp, zp) {
   
-  if (xp < min(lons) | xp > max(lons)) return(NA)
-  if (yp < min(lats) | yp > max(lats)) return(NA)
-  if (zp < min(depths) | zp > max(depths)) return(NA)
+  if (xp < min(lons) | xp > max(lons)) message("check1") & return(NA)
+  if (yp < min(lats) | yp > max(lats)) message("check2") & return(NA)
+  if (zp < min(depths) | zp > max(depths)) {
+    message("check3")
+    return(NA)
+  }
   
   # Find surrounding indices
   x0 <- max(which(lons <= xp)) # lower longitude: returns max of all the indices lower than the trawl longitude
@@ -123,10 +126,8 @@ lats <- st_dimensions(glorys)$y$offset +
 # Depth vector can just be extracted from the stars dimensions
 depths <- as.numeric(st_dimensions(glorys)$depth$values$start)
 
-
 # Empty data frame for joined data
 joined <- data.frame()
-
 
 # Iteration over years and months, calling the interpolation function for each haul - temp, so, npp, phyto, o2
 begin <- Sys.time()
@@ -175,24 +176,17 @@ Sys.time() - begin
 ```
 
 ```{r}
-# Housekeeping and cleaning environmental data
-rm(results, trawls_month, trawls_year, time_index, temp_slice, salinity_slice, phyto_slice, npp_slice, o2_slice, month, year, begin)
-
+# Join environmental data
 joined_clean <- joined |>
-  select(Trawl_id, temp, salinity, o2, phyto, npp) |>
   mutate(temp = drop_units(temp),
          o2 = drop_units(o2),
          phyto = drop_units(phyto),
          npp = drop_units(npp))
 
-# Join environmental data with specimen data by trawl id
 fishies_plus <- left_join(fishies_clean, joined_clean, by = join_by(Trawl_id))
+saveRDS(fishies_plus, "fish_nwfsc.rds")
 
-write.csv(fishies_plus, "fish_nwfsc.csv")
-```
-
-```{r}
-#trawls_nwfsc_plus <- read.csv("trawls_nwfsc_plus.csv", colClasses = c(Trawl_id = "character"))
-
+# Housekeeping
+rm(results, trawls_month, trawls_year, time_index, temp_slice, salinity_slice, phyto_slice, npp_slice, o2_slice, month, year, begin, nwfsc_combo, fishies, fishies_clean, fishies_plus, joined_clean, joined, glorys)
 ```
 
