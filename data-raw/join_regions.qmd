@@ -5,10 +5,6 @@ editor: source
 ---
 
 ```{r}
-fish_afsc <- read.csv("fish_afsc.csv")
-fish_pbs <- read.csv("fish_pbs.csv")
-fish_nwfsc <- read.csv("fish_nwfsc.csv")
-
 fish_afsc <- readRDS("fish_afsc.rds")
 fish_pbs <- readRDS("fish_pbs.rds")
 fish_nwfsc <- readRDS("fish_nwfsc.rds")
@@ -36,6 +32,10 @@ d2 <- fish_pbs |>
   mutate("weight_kg" = weight/1000, sex = convert_sex(sex), year = year(time)) |>
   rename(trawl_id = Trawl_id, common_name = species_common_name, scientific_name = species_science_name, length_cm = length) |>
   mutate(region = "pbs", trawl_id = as.character(trawl_id)) |>
+  mutate(common_name = case_when(
+    common_name == "north pacific spiny dogfish" ~ "pacific spiny dogfish",
+    .default = common_name 
+  )) |>
   select(trawl_id, region, common_name, scientific_name, length_cm, weight_kg, sex, time, lon, lat, depth, temp, salinity, o2, phyto, npp, year)
 
 # Temporary workaround to allow afsc joining without the hour-long loop
@@ -76,7 +76,7 @@ d3 <- fish_afsc |>
   mutate(region = "afsc", trawl_id = as.character(trawl_id), year = year(time)) |>
   mutate(weight_kg = weight_g/1000, length_cm = length_mm/10) |>
   mutate(sex = convert_sex(sex)) |>
-  select(trawl_id, region, common_name, scientific_name, length_cm, weight_kg, sex, time, lon, lat, depth, year)
+  select(trawl_id, region, common_name, scientific_name, length_cm, weight_kg, sex, time, lon, lat, depth, year, survey_name, temp, salinity, o2, phyto)
 
 fish_all <- bind_rows(d1, d2, d3)
 saveRDS(fish_all, "fish_all.rds")

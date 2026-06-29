@@ -52,7 +52,7 @@ trawls_afsc <- readRDS("./trawls/trawls_afsc.rds")
 trawls_afsc <- trawls_afsc |>
   mutate(time = as.Date(date)) |>
   rename(Trawl_id = event_id, lon = lon_start, lat = lat_start, depth = depth_m) |>
-  group_by(Trawl_id, time, lon, lat, depth) |>
+  group_by(Trawl_id, time, lon, lat, depth, survey_name) |>
   summarize(n = n()) |> select(-n)
 saveRDS(trawls_afsc, "./trawls/trawls_afsc.rds")
 ```

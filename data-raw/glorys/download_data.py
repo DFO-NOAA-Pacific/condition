@@ -6,9 +6,9 @@ START_DATE = "2003-01-01T00:00:00"
 END_DATE = "2023-12-31T23:59:59"
 
 regions = {
-    "nwfsc": {"min_lon": -126.25, "max_lon": -117.1, "min_lat": 31.5, "max_lat": 48.5, "min_depth": 47.37, "max_depth": 1452.25},
-    "pbs":  {"min_lon": -134.1,  "max_lon": -124.3, "min_lat": 48.1, "max_lat": 54.8, "min_depth":11.4, "max_depth": 1452.25},
-    "afsc": {"min_lon": -179.99,   "max_lon": -131,  "min_lat": 51, "max_lat": 65.35, "min_depth":7.93, "max_depth": 1245.29},
+    "nwfsc": {"min_lon": -126.25, "max_lon": -117, "min_lat": 31.5, "max_lat": 48.5, "min_depth": 47.37, "max_depth": 1684.28},
+    "pbs":  {"min_lon": -134.1,  "max_lon": -124.3, "min_lat": 48.1, "max_lat": 54.8, "min_depth":11.4, "max_depth": 1684.28},
+    "afsc": {"min_lon": 170, "max_lon": 229, "min_lat": 51, "max_lat": 65.5, "min_depth": 7.93, "max_depth": 1452.25},
 }
 
 # Download data
@@ -17,7 +17,7 @@ for region_name, bounds in regions.items():
     
     copernicusmarine.subset(
         dataset_id="cmems_mod_glo_phy_my_0.083deg_P1M-m",
-        variables=["so", "thetao"],
+        variables=["thetao", "so"],
         minimum_longitude=bounds["min_lon"],
         maximum_longitude=bounds["max_lon"],
         minimum_latitude=bounds["min_lat"],
@@ -32,7 +32,7 @@ for region_name, bounds in regions.items():
 
     copernicusmarine.subset(
         dataset_id="cmems_mod_glo_bgc_my_0.25deg_P1M-m",
-        variables=["o2", "phyc", "nppv"],
+        variables=["o2", "phyc"], 
         minimum_longitude=bounds["min_lon"],
         maximum_longitude=bounds["max_lon"],
         minimum_latitude=bounds["min_lat"],
@@ -46,10 +46,11 @@ for region_name, bounds in regions.items():
     )
 
     # Open netcdfs into memory
-    d1 = xr.open_dataset(f"./product1_{region_name}.nc")
-    d2 = xr.open_dataset(f"./product2_{region_name}.nc")
+    d1 = xr.open_dataset(f"./product1_{region_name}.nc").compute()
+    d2 = xr.open_dataset(f"./product2_{region_name}.nc").compute()
     
     # Interpolate (0.25 --> 0.083), merge, save
+    print("Interpolating and writing netcdf...")
     d2_aligned = d2.interp_like(d1, method="linear")
     combined = xr.merge([d1, d2_aligned])
     combined.to_netcdf(f"./glorys_{region_name}.nc")
@@ -57,6 +58,8 @@ for region_name, bounds in regions.items():
     # Housekeeping
     d1.close()
     d2.close()
+    d2_aligned.close()
+    combined.close()
     os.remove(f"./product1_{region_name}.nc")
     os.remove(f"./product2_{region_name}.nc")
     print(f"Done {region_name}")

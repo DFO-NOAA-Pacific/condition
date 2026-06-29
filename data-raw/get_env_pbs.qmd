@@ -5,7 +5,7 @@ editor: source
 ---
 
 ```{r}
-# Note: there are 17 trawls with no depth which explain NAs in the final product
+# Note: there are 17 trawls with no depth information which explain NAs in the final product
 ```
 
 

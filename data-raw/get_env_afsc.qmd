@@ -19,6 +19,7 @@ glorys <- st_as_stars(glorys)
 
 # Trawl data
 trawls_afsc <- readRDS("./trawls/trawls_afsc.rds")
+trawls_afsc <- trawls_afsc |> mutate(lon = ifelse(lon < 0, 360 + lon, lon)) # convert to netcdf format, to be changed after join
 
 # Specimen data
 spp_list <- data.frame(common_name = c("sablefish", "arrowtooth flounder", "dover sole", "shortspine thornyhead", "longspine thornyhead", "pacific ocean perch", "pacific spiny dogfish"))
@@ -26,12 +27,10 @@ spp_list <- data.frame(common_name = c("sablefish", "arrowtooth flounder", "dove
 download.file("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-db/main/data-raw/afsc-specimen.rds", destfile = "./afsc_specimen.rds", mode = "wb")
 afsc_dictionary <- read.csv("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-db/main/MasterSpeciesTableWithAphiaID.csv")
 afsc_specimen <- readRDS("afsc_specimen.rds")
-
 afsc_dictionary <- afsc_dictionary |>
   rename(itis = TSN) |>
   group_by(itis) |>
-  summarize(scientific_name = raw_species[1],
-                   common_name = raw_common[1])
+  summarize(scientific_name = raw_species[1], common_name = raw_common[1])
 
 combination <- left_join(afsc_specimen, afsc_dictionary, by = "itis") |>
   select(-scientific_name.y) |>
@@ -113,9 +112,7 @@ trilinear_interp <- function(lons, lats, depths, arr, xp, yp, zp) {
 ```
 
 ```{r}
-# Get the lon, lat vectors. Only have to generate once since temp and salinity are from the same product.
-# Offset is the longitude minimum, delta is the distance between points which multiplies with the number of x/y points
-# Eg. -126.3 + 0.083*(0, 1, 2, 3...109)
+# Get the lon, lat vectors. 
 lons <- st_dimensions(glorys)$x$offset + 
         st_dimensions(glorys)$x$delta *
         (seq_len(st_dimensions(glorys)$x$to) - 1)
@@ -155,15 +152,15 @@ for (year in 2003:2023) {
     salinity_slice <- glorys[["so"]][,,,time_index]
     o2_slice <- glorys[["o2"]][,,,time_index]
     phyto_slice <- glorys[["phyc"]][,,,time_index]
-    npp_slice <- glorys[["nppv"]][,,,time_index]
+    #npp_slice <- glorys[["nppv"]][,,,time_index]
     
     results <- trawls_month |>
       rowwise() |>
       mutate(temp = trilinear_interp(lons, lats, depths, temp_slice, lon, lat, depth),
              salinity = trilinear_interp(lons, lats, depths, salinity_slice, lon, lat, depth),
              o2 = trilinear_interp(lons, lats, depths, o2_slice, lon, lat, depth),
-             phyto = trilinear_interp(lons, lats, depths, phyto_slice, lon, lat, depth),
-             npp = trilinear_interp(lons, lats, depths, npp_slice, lon, lat, depth),
+             phyto = trilinear_interp(lons, lats, depths, phyto_slice, lon, lat, depth)
+             #npp = trilinear_interp(lons, lats, depths, npp_slice, lon, lat, depth),
              
       ) |>
       ungroup()
@@ -183,14 +180,19 @@ Sys.time() - begin
 joined_clean <- joined |>
   mutate(temp = drop_units(temp),
          o2 = drop_units(o2),
-         phyto = drop_units(phyto),
-         npp = drop_units(npp))
+         phyto = drop_units(phyto)) |>
+  mutate(lon = ifelse(lon > 180, -360 + lon, lon))
+         #npp = drop_units(npp))
 
-fishies_plus <- left_join(afsc_subset, joined_clean, by = join_by(Trawl_id))
+fishies_plus <- left_join(afsc_subset, joined_clean, by = join_by(Trawl_id)) |> 
+  filter(!is.na(time)) # Getting rid of fish outside the time range since the original afsc_subset does not have a time variable
+
 saveRDS(fishies_plus, "fish_afsc.rds")
+```
 
+```{r}
 # Housekeeping
-rm(results, trawls_month, trawls_year, time_index, temp_slice, salinity_slice, phyto_slice, npp_slice, o2_slice, month, year, begin)
+rm(results, trawls_month, trawls_year, time_index, temp_slice, salinity_slice, phyto_slice, o2_slice, month, year, begin)
 ```
 
 
