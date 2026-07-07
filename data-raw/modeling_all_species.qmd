@@ -1,0 +1,192 @@
+---
+title: "all_species"
+format: html
+editor: source
+---
+# Imports
+```{r warning = FALSE, message = FALSE}
+library(sdmTMB)
+library(ggplot2)
+library(surveyjoin)
+library(rnaturalearth)
+library(stringr)
+library(dplyr)
+library(lubridate)
+library(broom)
+library(tidyr)
+library(sf)
+library(gganimate)
+library(RhpcBLASctl)
+RhpcBLASctl::blas_set_num_threads(1)
+RhpcBLASctl::omp_set_num_threads(1)
+options(scipen = 999)
+```
+
+```{r}
+# Get base maps
+states <- ne_download(scale = 50, type = "states", category = "cultural", returnclass = "sf")
+states <- states |> filter(admin == "United States of America")
+canada <- ne_download(scale = 50, type = "states", category = "cultural", returnclass = "sf")
+canada <- canada |> filter(admin == "Canada") |> select(name, geometry)
+mexico <- ne_countries(scale = "medium", returnclass = "sf", country = "mexico") |> 
+  select(name = admin, geometry)
+alaska <- states |> filter(.data$name == "Alaska")
+
+# Combine, get equal areas crs, crop
+proj <- bind_rows(states, canada, mexico, alaska) |>
+  st_transform(4326) |>
+  st_crop(c(xmin = -170, ymin = 25, xmax = -115, ymax = 75)) |>
+  st_transform(3338)
+rm(states, canada, mexico, alaska)
+```
+
+# Data 
+```{r}
+# Biological data
+fish_all <- readRDS("fish_all.rds")
+
+fsh <- function (species, cutoff) {
+  # Filters: no 2020 PBS fish, no unsexed fish, no entries with missing coordinates, no zeroed lengths/weights that will crash the models
+  
+  a <- fish_all |> 
+  filter(common_name == species) |> 
+  filter(weight_kg > 0, 
+         length_cm > 0, 
+         !is.na(lon), 
+         !is.na(temp), 
+         year != 2020,
+         sex %in% c("M", "F")) |>
+  mutate(yearc = as.numeric(scale(year, center = T, scale = F)),
+         tempc = temp - mean(temp),
+         salinityc = salinity - mean(salinity))
+  
+  a <- sdmTMB::add_utm_columns(a, ll_names = c("lon", "lat"), utm_crs = 3338)
+  mesh <- sdmTMB::make_mesh(a, xy_cols = c("X","Y"), cutoff = cutoff)
+  message("Mesh: ", mesh$mesh$n, " Modeling ", species, " A...")
+  
+  A <- sdmTMB(log(weight_kg) ~ log(length_cm) + as.factor(year) + as.factor(sex),
+            mesh = mesh,
+            spatial = "on",
+            time = "year",
+            spatiotemporal = "rw",
+            anisotropy = TRUE,
+            data = a)
+  
+  message("B...")
+  # Does the l-w relationship vary spatially?
+  B <- sdmTMB(log(weight_kg) ~ log(length_cm) + as.factor(year) + as.factor(sex),
+              mesh = mesh,
+              spatial = "on",
+              spatial_varying = ~ log(length_cm),
+              time = "year",
+              spatiotemporal = "rw",
+              anisotropy = TRUE,
+              data = a)
+  message("C...")
+  # Are there region-specific year trends in condition? (simple approach)
+  C <- sdmTMB(log(weight_kg) ~ log(length_cm) + as.factor(year)*as.factor(region) + as.factor(sex),
+              mesh = mesh,
+              spatial = "on",
+              time = "year",
+              spatiotemporal = "rw",
+              anisotropy = TRUE,
+              data = a)
+  message("D...")
+  # Is condition better predicted when year has spatial field variance or as an interaction in the fixed effects (C)? ----- NO CONVERGENCE, even with using residuals
+  D <- sdmTMB(log(weight_kg) ~ log(length_cm) + as.factor(year) + as.factor(sex),
+              mesh = mesh,
+              spatial = "on",
+              spatial_varying = ~ as.factor(year),
+              time = "year",
+              spatiotemporal = "rw",
+              anisotropy = TRUE,
+              data = a)
+  
+  return(list(A,B,C,D))
+}
+
+arr <- fsh("arrowtooth flounder", 100)
+dover <-  fsh("dover sole", cutoff = 80) 
+dogfish <- fsh("pacific spiny dogfish", cutoff = 62) 
+shortspine <- fsh("shortspine thornyhead", cutoff = 85)
+perch <- fsh("pacific ocean perch", cutoff = 85)
+```
+
+# AIC / BIC
+```{r}
+
+AIC(A, B, C) |> arrange(AIC)
+BIC(A, B, C) |> arrange(BIC)
+```
+
+
+# Predictions and mapping
+```{r}
+# Get grids from surveyjoin and combine
+grid <- bind_rows(surveyjoin::nwfsc_grid, surveyjoin::dfo_synoptic_grid, surveyjoin::afsc_grid)
+grid <- add_utm_columns(grid, ll_names = c("lon", "lat"), utm_crs = 3338)
+
+# Add time, length, sex
+grid <- expand_grid(grid, year = unique(a$year)) |>
+  mutate(length_cm = mean(a$length_cm, na.rm = T)) |>
+  mutate(sex = "F")
+
+pred <- predict(B, grid)
+
+pred <- pred |>
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) |>
+  st_transform(3338) |>
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) |>
+  st_drop_geometry()
+
+df <- pred |> pivot_longer(cols = c(est_rf, epsilon_st, omega_s, `zeta_s_log(length_cm)`), names_to = "re", values_to = "value")
+
+ggplot() +
+  stat_summary_hex(data = df, aes(x = x, y = y, z = value), bins = 50) +
+  scale_fill_gradient2(name = "estimate")+
+  geom_sf(data = proj) +
+  geom_sf_text(data = proj, aes(label = name), size = 2, check_overlap = F) +
+  theme_minimal() +
+  facet_wrap(~re) +
+  labs(x = "", y = "")
+```
+
+
+# Time series
+```{r}
+d <- tidy(B, effects = "fixed") |>
+  filter(str_detect(term,"year")) |>
+  mutate(year = str_remove(term, "as.factor\\(year\\)")) |>
+  ggplot(aes(x = year, y = estimate)) +
+  geom_point() + 
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.3) +
+  theme_minimal() +
+  labs(x = "Year", y = "estimate") +
+  theme(axis.text.x = element_text(angle = 40, vjust = 0.8, hjust = 0.5))
+d
+```
+
+# Animations
+```{r}
+# g <- ggplot() +
+#   stat_summary_hex(data = pred, aes(x = x, y = y, z = anomaly), bins = 50) +
+#   scale_fill_gradient2(name = "spatial/temporal \nanomaly") +
+#   geom_sf(data= proj) +
+#   facet_wrap(~year) +
+#   #geom_sf_text(data = proj, aes(label = name), size = 2.5, check_overlap = F) +
+#   theme_minimal()
+
+p <- ggplot() +
+      stat_summary_hex(data = pred, aes(x = x, y = y, z = est_rf), bins = 50) +
+      scale_fill_gradient2(name = "spatial/temporal \nanomaly")+
+      geom_sf(data = proj) +
+      geom_sf_text(data = proj, aes(label = name), size = 2.5, fontface = "bold", check_overlap = F) +
+      theme_minimal() +
+  labs(title = "Year: {closest_state}") +
+  transition_states(year, transition_length = 1, state_length = 1)
+
+animate(p, fps = 5, width = 700, height = 700)
+```
+
+

@@ -1,0 +1,202 @@
+---
+title: "modeling2"
+format: html
+editor: source
+---
+
+```{r}
+library(sdmTMB)
+library(ggplot2)
+library(surveyjoin)
+library(rnaturalearth)
+library(stringr)
+library(dplyr)
+library(lubridate)
+library(broom)
+library(tidyr)
+library(sf)
+library(gganimate)
+library(patchwork)
+library(RhpcBLASctl)
+RhpcBLASctl::blas_set_num_threads(1)
+RhpcBLASctl::omp_set_num_threads(1)
+```
+
+```{r}
+# Biological data
+fish_all <- readRDS("fish_all.rds")
+
+# Get grids from surveyjoin and combine (for making predictions)
+grid <- bind_rows(surveyjoin::nwfsc_grid, surveyjoin::dfo_synoptic_grid, surveyjoin::afsc_grid)
+grid <- add_utm_columns(grid, ll_names = c("lon", "lat"), utm_crs = 3338)
+
+
+fsh <- function(species, cutoff = 100) {
+  df <- fish_all |> filter(common_name == species)
+  
+  # Clean missing data and 0s, remove sparse 2020 data
+  df <- df |>
+    filter(!is.na(lon), !is.na(weight_kg)) |>
+    filter(weight_kg > 0, length_cm > 0) |>
+    mutate(year = year(time)) |>
+    filter(year >= 2003 & year <= 2023) |>
+    filter(year != 2020)
+
+  grid1 <- expand_grid(grid, year = unique(df$year))
+  grid1 <- grid1 |>
+    mutate(length_cm = mean(df$length_cm, na.rm = TRUE))
+
+  # Model
+  message("Modeling...")
+  m <- lm(log(weight_kg) ~ log(length_cm), data = df)
+  df$resids <- residuals(m)
+  df <- sdmTMB::add_utm_columns(df, ll_names = c("lon", "lat"), utm_crs = 3338)
+  
+  mesh <- sdmTMB::make_mesh(df, xy_cols = c("X","Y"), cutoff = cutoff)
+  message(mesh$mesh$n)
+  
+  mod1 <- sdmTMB(resids ~ 1, # as.factor(sex) + s(temp,k=4) + (1|trawl_id)
+               mesh = mesh,
+               spatiotemporal = "iid",
+               time = "year",
+               time_varying = ~ 1,
+               time_varying_type = "ar1", # or rw, but just keep consistent
+               #extra_time = 2020, # dogfish has 0 obs for 2020, take out obs for other species...
+               data = df)
+  # add spatial_varying ~ year, center (divide by 10), add year to fixed effects, spatiotemporal = off, time_varying rm
+  # Also see if Smith has computing power...
+  # rm time_varying, spatiotemporal = rw
+  # experiment with separate models
+  
+  # Predictions
+  message("Making predictions...")
+  pred <- predict(mod1, grid1)
+  pred <- pred |> 
+    mutate(est2 = exp(est),
+           anomaly = omega_s + epsilon_st)
+  
+  # Change crs to Alaska equal area 
+  pred <- pred |>
+    st_as_sf(coords = c("lon", "lat"), crs = 4326) |>
+    st_transform(3338) |>
+    mutate(x = st_coordinates(geometry)[,1],
+           y = st_coordinates(geometry)[,2]) |>
+    st_drop_geometry()
+  return(list(mod1, pred))
+}
+
+
+dover <-  fsh("dover sole", cutoff = 80) 
+dogfish <- fsh("pacific spiny dogfish", cutoff = 62) 
+arrowtooth <- fsh("arrowtooth flounder", cutoff = 100)
+shortspine <- fsh("shortspine thornyhead", cutoff = 85)
+perch <- fsh("pacific ocean perch", cutoff = 85) 
+
+```
+
+```{r}
+# Maps
+
+# Get base maps
+states <- ne_download(scale = 50, type = "states", category = "cultural", returnclass = "sf")
+states <- states |> filter(admin == "United States of America")
+canada <- ne_download(scale = 50, type = "states", category = "cultural", returnclass = "sf")
+canada <- canada |> filter(admin == "Canada") |> select(name, geometry)
+mexico <- ne_countries(scale = "medium", returnclass = "sf", country = "mexico") |> 
+  select(name = admin, geometry)
+alaska <- states |> filter(.data$name == "Alaska")
+
+# Combine, get equal areas crs, crop
+proj <- bind_rows(states, canada, mexico, alaska) |>
+  st_transform(4326) |>
+  st_crop(c(xmin = -170, ymin = 25, xmax = -115, ymax = 75)) |>
+  st_transform(3338)
+rm(states, canada, mexico, alaska)
+
+anomaly <- function(predictions, species, projection) {
+  ggplot() +
+    stat_summary_hex(data = predictions, aes(x = x, y = y, z = anomaly), bins = 50) +
+    scale_fill_gradient2(name = "spatial/temporal \nanomaly")+
+    geom_sf(data = projection) +
+    geom_sf_text(data = projection, aes(label = name), size = 2, check_overlap = F) +
+    theme_minimal() +
+    labs(x = "", y = "", title = species)
+}
+
+a <- anomaly(arrowtooth[[2]], "Arrowtooth flounder", proj)
+b <- anomaly(dover[[2]], "Dover sole", proj)
+c <- anomaly(dogfish[[2]], "Pacific spiny dogfish", proj)
+d <- anomaly(shortspine[[2]], "Shortspine thornyhead", proj)
+e <- anomaly(perch[[2]], "Pacific ocean perch", proj)
+
+f <- a + b + c + d + e + plot_layout(ncol = 2)
+ggsave("test.png", f, width =12, height = 12)
+
+# Only 2 dogfish observations in the Aleutian islands, none for the Bering sea... don't think its a naming issue?
+fish_all |> filter(common_name == "pacific spiny dogfish", region == "afsc") |> count(survey_name)
+```
+
+```{r}
+# Time series 
+
+models <- list(
+  arrow = arrowtooth[[1]])
+  #dover = dover[[1]],
+  #dogfish = dogfish[[1]],
+  #perch = perch[[1]],
+  #shortspine = shortspine[[1]])
+
+time_series <- purrr::map_df(models, function(mod) {
+  tidy(mod, effects = "ran_vals")|>
+    mutate(year = str_remove(term, "\\(Intercept\\):"))
+}, .id = "species")
+
+mean_st <- arrowtooth[[2]] |>
+  group_by(year) |>
+  summarize(mean_st = mean(epsilon_st),
+            sd_st = sd(epsilon_st)) |>
+  mutate(year = as.character(year))
+
+df <- time_series |> left_join(mean_st, by = "year") |>
+  mutate(est_plus_st = estimate + mean_st)
+
+ggplot(df, aes(x = year, y = est_plus_st)) +
+  geom_point()+
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.3) +
+  facet_wrap(~species) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 0.5))
+  
+```
+
+
+```{r}
+# Spatial / temporal ratios
+ran_pars <- purrr::map_df(models, function(m) {
+  tidy(m, effects = "ran_pars")
+}, .id = "species")
+
+ran_pars |>
+  filter(term %in% c("sigma_O", "sigma_E")) |>
+  select(species, term, estimate) |>
+  pivot_wider(names_from = term, values_from = estimate) |>
+  mutate(ratio_E_O = sigma_E / sigma_O,  # spatiotemporal relative to spatial
+         ratio_O_E = sigma_O / sigma_E)   # spatial relative to spatiotemporal
+```
+
+
+```{r}
+# Animations 
+
+p <- ggplot() +
+      stat_summary_hex(data = arrowtooth[[2]], aes(x = x, y = y, z = anomaly), bins = 50) +
+      scale_fill_gradient2(name = "spatial/temporal \nanomaly")+
+      geom_sf(data = proj) +
+      geom_sf_text(data = proj, aes(label = name), size = 2.5, fontface = "bold", check_overlap = F) +
+      theme_minimal() +
+  labs(title = "Year: {closest_state}") +
+  transition_states(year, transition_length = 1, state_length = 1)
+
+animate(p, fps = 5, width = 700, height = 700)
+```
+
