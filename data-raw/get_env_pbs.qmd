@@ -133,7 +133,7 @@ begin <- Sys.time()
 for (year in 2003:2023) {
   
   message("Processing ", year)
-  trawls_year <- trawls_pbs |> filter(format(time, "%Y") == year)
+  trawls_year <- trawls_pbs |> filter(format(time, "%Y") == year) # data in every year actually, even 2020
   if (nrow(trawls_year) == 0) message("No data: ", year) & next
   
   for (month in 1:12) {
@@ -151,7 +151,7 @@ for (year in 2003:2023) {
     salinity_slice <- glorys[["so"]][,,,time_index]
     o2_slice <- glorys[["o2"]][,,,time_index]
     phyto_slice <- glorys[["phyc"]][,,,time_index]
-    npp_slice <- glorys[["nppv"]][,,,time_index]
+    #npp_slice <- glorys[["nppv"]][,,,time_index]
     
     results <- trawls_month |>
       rowwise() |>
@@ -159,7 +159,7 @@ for (year in 2003:2023) {
              salinity = trilinear_interp(lons, lats, depths, salinity_slice, lon, lat, depth),
              o2 = trilinear_interp(lons, lats, depths, o2_slice, lon, lat, depth),
              phyto = trilinear_interp(lons, lats, depths, phyto_slice, lon, lat, depth),
-             npp = trilinear_interp(lons, lats, depths, npp_slice, lon, lat, depth),
+             #npp = trilinear_interp(lons, lats, depths, npp_slice, lon, lat, depth),
              
       ) |>
       ungroup()
@@ -179,13 +179,13 @@ Sys.time() - begin
 joined_clean <- joined |>
   mutate(temp = drop_units(temp),
          o2 = drop_units(o2),
-         phyto = drop_units(phyto),
-         npp = drop_units(npp))
+         phyto = drop_units(phyto)) #,
+         #npp = drop_units(npp))
 
 fishies_plus <- left_join(pbs_bio, joined_clean, by = join_by(Trawl_id))
 saveRDS(fishies_plus, "fish_pbs.rds")
 
 # Housekeeping
-rm(results, trawls_month, trawls_year, time_index, temp_slice, salinity_slice, phyto_slice, npp_slice, o2_slice, month, year, begin, joined, joined_clean, fishies_plus, glorys, pbs_data, pbs_bio)
+rm(results, trawls_month, trawls_year, time_index, temp_slice, salinity_slice, phyto_slice, o2_slice, month, year, begin, joined, joined_clean, fishies_plus, glorys, pbs_bio)
 ```
 

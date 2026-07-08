@@ -25,61 +25,32 @@ convert_sex <- function(x) {
 ```{r}
 d1 <- fish_nwfsc |>
   rename(common_name = Common_name, length_cm = Length_cm, weight_kg = Weight_kg, trawl_id = Trawl_id, scientific_name = Scientific_name, sex = Sex) |>
-  mutate(region = "nwfsc", trawl_id = as.character(trawl_id), year = year(time)) |>
-  select(trawl_id, region, common_name, scientific_name, length_cm, weight_kg, sex, time, lon, lat, depth, temp, salinity, o2, phyto, npp, year)
+  mutate(region = "nwfsc", survey = "NWFSC.Combo", trawl_id = as.character(trawl_id), year = year(time)) |>
+  select(trawl_id, region, common_name, scientific_name, length_cm, weight_kg, sex, survey, time, lon, lat, depth, temp, salinity, o2, phyto, year)
 
 d2 <- fish_pbs |>
   mutate("weight_kg" = weight/1000, sex = convert_sex(sex), year = year(time)) |>
-  rename(trawl_id = Trawl_id, common_name = species_common_name, scientific_name = species_science_name, length_cm = length) |>
+  rename(trawl_id = Trawl_id, common_name = species_common_name, scientific_name = species_science_name, length_cm = length, survey = survey_name) |>
   mutate(region = "pbs", trawl_id = as.character(trawl_id)) |>
   mutate(common_name = case_when(
     common_name == "north pacific spiny dogfish" ~ "pacific spiny dogfish",
     .default = common_name 
   )) |>
-  select(trawl_id, region, common_name, scientific_name, length_cm, weight_kg, sex, time, lon, lat, depth, temp, salinity, o2, phyto, npp, year)
-
-# Temporary workaround to allow afsc joining without the hour-long loop
-# Trawl data
-#trawls_afsc <- readRDS("./trawls/trawls_afsc.rds")
-
-# Specimen data
-# spp_list <- data.frame(common_name = c("sablefish", "arrowtooth flounder", "dover sole", "shortspine thornyhead", "longspine thornyhead", "pacific ocean perch", "pacific spiny dogfish"))
-# 
-# download.file("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-db/main/data-raw/afsc-specimen.rds", destfile = "./afsc_specimen.rds", mode = "wb")
-# 
-# download.file("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-db/main/MasterSpeciesTableWithAphiaID.csv", destfile = "./afsc_dictionary.csv", mode = "wb")
-# 
-# afsc_specimen <- readRDS("afsc_specimen.rds")
-# afsc_dictionary <- read.csv("afsc_dictionary.csv")
-# afsc_dictionary <- afsc_dictionary |>
-#   rename(itis = TSN) |>
-#   group_by(itis) |>
-#   summarize(scientific_name = raw_species[1],
-#                    common_name = raw_common[1])
-# 
-# combination <- left_join(afsc_specimen, afsc_dictionary, by = "itis") |>
-#   select(-scientific_name.y) |>
-#   select(-common_name.y) |>
-#   rename(scientific_name = scientific_name.x, common_name = common_name.x)
-# combination$common_name[combination$common_name == "Dover sole"] <- "dover sole"
-# combination$common_name[combination$common_name == "Pacific ocean perch"] <- "pacific ocean perch"
-# combination$common_name[combination$common_name == "spiny dogfish"] <- "pacific spiny dogfish"
-# 
-# afsc_subset <- combination |>
-#   filter(common_name %in% spp_list$common_name) |>
-#   rename(Trawl_id = event_id)
-# 
-# p <- left_join(afsc_subset, trawls_afsc, by = join_by(Trawl_id))
+  select(trawl_id, region, common_name, scientific_name, length_cm, weight_kg, sex, survey, time, lon, lat, depth, temp, salinity, o2, phyto, year)
 
 d3 <- fish_afsc |>
-  rename(trawl_id = Trawl_id) |>
+  rename(trawl_id = Trawl_id, survey = survey_name) |>
   mutate(region = "afsc", trawl_id = as.character(trawl_id), year = year(time)) |>
   mutate(weight_kg = weight_g/1000, length_cm = length_mm/10) |>
   mutate(sex = convert_sex(sex)) |>
-  select(trawl_id, region, common_name, scientific_name, length_cm, weight_kg, sex, time, lon, lat, depth, year, survey_name, temp, salinity, o2, phyto)
+  select(trawl_id, region, common_name, scientific_name, length_cm, weight_kg, sex, time, lon, lat, depth, year, survey, temp, salinity, o2, phyto)
 
-fish_all <- bind_rows(d1, d2, d3)
+fish_all <- bind_rows(d1, d2, d3) |>
+  filter(year >= 2003, year <= 2023)
 saveRDS(fish_all, "fish_all.rds")
+```
 
+```{r}
+rm(d1, d2, d3)
 ```
 
