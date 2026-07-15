@@ -1,0 +1,1168 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+%
+\documentclass[
+  letterpaper,
+  DIV=11,
+  numbers=noendperiod]{scrartcl}
+
+\usepackage{amsmath,amssymb}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else  
+    % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\usepackage[left=1in,right=1in,top=1in,bottom=1in]{geometry}
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+% Make \paragraph and \subparagraph free-standing
+\makeatletter
+\ifx\paragraph\undefined\else
+  \let\oldparagraph\paragraph
+  \renewcommand{\paragraph}{
+    \@ifstar
+      \xxxParagraphStar
+      \xxxParagraphNoStar
+  }
+  \newcommand{\xxxParagraphStar}[1]{\oldparagraph*{#1}\mbox{}}
+  \newcommand{\xxxParagraphNoStar}[1]{\oldparagraph{#1}\mbox{}}
+\fi
+\ifx\subparagraph\undefined\else
+  \let\oldsubparagraph\subparagraph
+  \renewcommand{\subparagraph}{
+    \@ifstar
+      \xxxSubParagraphStar
+      \xxxSubParagraphNoStar
+  }
+  \newcommand{\xxxSubParagraphStar}[1]{\oldsubparagraph*{#1}\mbox{}}
+  \newcommand{\xxxSubParagraphNoStar}[1]{\oldsubparagraph{#1}\mbox{}}
+\fi
+\makeatother
+
+
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+% Set default figure placement to htbp
+\def\fps@figure{htbp}
+\makeatother
+
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{wrapfig}
+\usepackage{float}
+\usepackage{colortbl}
+\usepackage{pdflscape}
+\usepackage{tabu}
+\usepackage{threeparttable}
+\usepackage{threeparttablex}
+\usepackage[normalem]{ulem}
+\usepackage{makecell}
+\usepackage{xcolor}
+\usepackage{fvextra}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+\DefineVerbatimEnvironment{OutputCode}{Verbatim}{breaklines,commandchars=\\\{\}}
+\KOMAoption{captions}{tableheading}
+\makeatletter
+\@ifpackageloaded{caption}{}{\usepackage{caption}}
+\AtBeginDocument{%
+\ifdefined\contentsname
+  \renewcommand*\contentsname{Table of contents}
+\else
+  \newcommand\contentsname{Table of contents}
+\fi
+\ifdefined\listfigurename
+  \renewcommand*\listfigurename{List of Figures}
+\else
+  \newcommand\listfigurename{List of Figures}
+\fi
+\ifdefined\listtablename
+  \renewcommand*\listtablename{List of Tables}
+\else
+  \newcommand\listtablename{List of Tables}
+\fi
+\ifdefined\figurename
+  \renewcommand*\figurename{Figure}
+\else
+  \newcommand\figurename{Figure}
+\fi
+\ifdefined\tablename
+  \renewcommand*\tablename{Table}
+\else
+  \newcommand\tablename{Table}
+\fi
+}
+\@ifpackageloaded{float}{}{\usepackage{float}}
+\floatstyle{ruled}
+\@ifundefined{c@chapter}{\newfloat{codelisting}{h}{lop}}{\newfloat{codelisting}{h}{lop}[chapter]}
+\floatname{codelisting}{Listing}
+\newcommand*\listoflistings{\listof{codelisting}{List of Listings}}
+\makeatother
+\makeatletter
+\makeatother
+\makeatletter
+\@ifpackageloaded{caption}{}{\usepackage{caption}}
+\@ifpackageloaded{subcaption}{}{\usepackage{subcaption}}
+\makeatother
+
+\usepackage{bookmark}
+
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same} % disable monospaced font for URLs
+\hypersetup{
+  pdftitle={Tables},
+  colorlinks=true,
+  linkcolor={blue},
+  filecolor={Maroon},
+  citecolor={Blue},
+  urlcolor={Blue},
+  pdfcreator={LaTeX via pandoc}}
+
+
+\title{Tables}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\renewcommand*\contentsname{Table of contents}
+{
+\hypersetup{linkcolor=}
+\setcounter{tocdepth}{3}
+\tableofcontents
+}
+
+\section{To do:}\label{to-do}
+
+\begin{itemize}
+\tightlist
+\item
+  Aggregate regions and do species-specific KS test (or other tests) to
+  compare length distributions
+\item
+  Make tables for each species, see if there is enough data by year and
+  survey
+\item
+  Investigate depth gradients across different survyeys --\textgreater{}
+  eg. nwfsc goes deeper so might have more lengths on the longer side
+\end{itemize}
+
+\section{Distribution tests}\label{distribution-tests}
+
+Wasserstein test: determine if two samples come from the same
+distribution. Quantifies the amount of transport you would need to get
+from one distribution to the other.
+
+\pandocbounded{\includegraphics[keepaspectratio]{tables_files/figure-pdf/unnamed-chunk-3-1.pdf}}
+
+\begin{verbatim}
+Species: arrowtooth flounder. PBS sd: 12.36. AFSC sd: 14.17. NWFSC sd: 11.31
+\end{verbatim}
+
+\begin{verbatim}
+PBS and NWFSC: 1.98 cm.
+\end{verbatim}
+
+\begin{verbatim}
+PBS and AFSC: 1.97 cm.
+\end{verbatim}
+
+\begin{verbatim}
+NWFSC and AFSC: 2.08 cm.
+\end{verbatim}
+
+\begin{verbatim}
+\end{verbatim}
+
+\begin{verbatim}
+Species: dover sole. PBS sd: 6.3. AFSC sd: 8.85. NWFSC sd: 7.57
+\end{verbatim}
+
+\begin{verbatim}
+PBS and NWFSC: 1.95 cm.
+\end{verbatim}
+
+\begin{verbatim}
+PBS and AFSC: 4.37 cm.
+\end{verbatim}
+
+\begin{verbatim}
+NWFSC and AFSC: 6.17 cm.
+\end{verbatim}
+
+\begin{verbatim}
+\end{verbatim}
+
+\begin{verbatim}
+Species: pacific spiny dogfish. PBS sd: 12.25. AFSC sd: 8.75. NWFSC sd: 17.87
+\end{verbatim}
+
+\begin{verbatim}
+PBS and NWFSC: 11.65 cm.
+\end{verbatim}
+
+\begin{verbatim}
+PBS and AFSC: 11.04 cm.
+\end{verbatim}
+
+\begin{verbatim}
+NWFSC and AFSC: 22.43 cm.
+\end{verbatim}
+
+\begin{verbatim}
+\end{verbatim}
+
+\begin{verbatim}
+Species: shortspine thornyhead. PBS sd: 6.42. AFSC sd: 10.33. NWFSC sd: 11.49
+\end{verbatim}
+
+\begin{verbatim}
+PBS and NWFSC: 8.26 cm.
+\end{verbatim}
+
+\begin{verbatim}
+PBS and AFSC: 5.61 cm.
+\end{verbatim}
+
+\begin{verbatim}
+NWFSC and AFSC: 2.66 cm.
+\end{verbatim}
+
+\begin{verbatim}
+\end{verbatim}
+
+\begin{verbatim}
+Species: pacific ocean perch. PBS sd: 7.88. AFSC sd: 7.75. NWFSC sd: 7.99
+\end{verbatim}
+
+\begin{verbatim}
+PBS and NWFSC: 4.49 cm.
+\end{verbatim}
+
+\begin{verbatim}
+PBS and AFSC: 1.94 cm.
+\end{verbatim}
+
+\begin{verbatim}
+NWFSC and AFSC: 2.59 cm.
+\end{verbatim}
+
+\begin{verbatim}
+\end{verbatim}
+
+\section{Number of observations - by year and
+survey}\label{number-of-observations---by-year-and-survey}
+
+\subsection{Arrowtooth flounder}\label{arrowtooth-flounder}
+
+\begin{itemize}
+\tightlist
+\item
+  Remove northern Bering Sea (only 1 year)
+\item
+  Remove Bering Sea Slope (only 3 years)
+\end{itemize}
+
+\begin{tabular}[t]{l|l|r|r}
+\hline
+common\_name & survey & year & n\\
+\hline
+arrowtooth flounder & Aleutian Islands & 2004 & 755\\
+\hline
+arrowtooth flounder & Aleutian Islands & 2006 & 553\\
+\hline
+arrowtooth flounder & Aleutian Islands & 2010 & 723\\
+\hline
+arrowtooth flounder & Aleutian Islands & 2012 & 402\\
+\hline
+arrowtooth flounder & Aleutian Islands & 2014 & 315\\
+\hline
+arrowtooth flounder & Aleutian Islands & 2016 & 483\\
+\hline
+arrowtooth flounder & Aleutian Islands & 2018 & 593\\
+\hline
+arrowtooth flounder & Aleutian Islands & 2022 & 512\\
+\hline
+arrowtooth flounder & Bering Sea Slope & 2010 & 773\\
+\hline
+arrowtooth flounder & Bering Sea Slope & 2012 & 474\\
+\hline
+arrowtooth flounder & Bering Sea Slope & 2016 & 439\\
+\hline
+arrowtooth flounder & Gulf of Alaska & 2003 & 1021\\
+\hline
+arrowtooth flounder & Gulf of Alaska & 2005 & 1093\\
+\hline
+arrowtooth flounder & Gulf of Alaska & 2007 & 1123\\
+\hline
+arrowtooth flounder & Gulf of Alaska & 2009 & 1158\\
+\hline
+arrowtooth flounder & Gulf of Alaska & 2011 & 897\\
+\hline
+arrowtooth flounder & Gulf of Alaska & 2013 & 821\\
+\hline
+arrowtooth flounder & Gulf of Alaska & 2015 & 828\\
+\hline
+arrowtooth flounder & Gulf of Alaska & 2017 & 893\\
+\hline
+arrowtooth flounder & Gulf of Alaska & 2019 & 881\\
+\hline
+arrowtooth flounder & Gulf of Alaska & 2021 & 935\\
+\hline
+arrowtooth flounder & Gulf of Alaska & 2023 & 919\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2003 & 902\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2004 & 556\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2005 & 864\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2006 & 722\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2007 & 881\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2008 & 876\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2009 & 946\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2010 & 1127\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2011 & 1046\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2012 & 1017\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2013 & 689\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2014 & 907\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2015 & 966\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2016 & 974\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2017 & 866\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2018 & 761\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2019 & 376\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2021 & 623\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2022 & 677\\
+\hline
+arrowtooth flounder & NWFSC.Combo & 2023 & 842\\
+\hline
+arrowtooth flounder & SYN HS & 2005 & 799\\
+\hline
+arrowtooth flounder & SYN HS & 2007 & 845\\
+\hline
+arrowtooth flounder & SYN HS & 2009 & 2443\\
+\hline
+arrowtooth flounder & SYN HS & 2011 & 2526\\
+\hline
+arrowtooth flounder & SYN HS & 2013 & 923\\
+\hline
+arrowtooth flounder & SYN HS & 2015 & 852\\
+\hline
+arrowtooth flounder & SYN HS & 2017 & 1348\\
+\hline
+arrowtooth flounder & SYN HS & 2019 & 2085\\
+\hline
+arrowtooth flounder & SYN HS & 2021 & 1391\\
+\hline
+arrowtooth flounder & SYN HS & 2023 & 1693\\
+\hline
+arrowtooth flounder & SYN QCS & 2003 & 1011\\
+\hline
+arrowtooth flounder & SYN QCS & 2004 & 603\\
+\hline
+arrowtooth flounder & SYN QCS & 2005 & 936\\
+\hline
+arrowtooth flounder & SYN QCS & 2007 & 2115\\
+\hline
+arrowtooth flounder & SYN QCS & 2009 & 2630\\
+\hline
+arrowtooth flounder & SYN QCS & 2011 & 3766\\
+\hline
+arrowtooth flounder & SYN QCS & 2013 & 3221\\
+\hline
+arrowtooth flounder & SYN QCS & 2015 & 3761\\
+\hline
+arrowtooth flounder & SYN QCS & 2017 & 2999\\
+\hline
+arrowtooth flounder & SYN QCS & 2019 & 3923\\
+\hline
+arrowtooth flounder & SYN QCS & 2021 & 3328\\
+\hline
+arrowtooth flounder & SYN QCS & 2023 & 2211\\
+\hline
+arrowtooth flounder & SYN WCHG & 2006 & 207\\
+\hline
+arrowtooth flounder & SYN WCHG & 2007 & 335\\
+\hline
+arrowtooth flounder & SYN WCHG & 2008 & 491\\
+\hline
+arrowtooth flounder & SYN WCHG & 2010 & 538\\
+\hline
+arrowtooth flounder & SYN WCHG & 2012 & 819\\
+\hline
+arrowtooth flounder & SYN WCHG & 2014 & 632\\
+\hline
+arrowtooth flounder & SYN WCHG & 2016 & 200\\
+\hline
+arrowtooth flounder & SYN WCHG & 2018 & 148\\
+\hline
+arrowtooth flounder & SYN WCHG & 2022 & 237\\
+\hline
+arrowtooth flounder & SYN WCVI & 2004 & 275\\
+\hline
+arrowtooth flounder & SYN WCVI & 2006 & 427\\
+\hline
+arrowtooth flounder & SYN WCVI & 2008 & 1184\\
+\hline
+arrowtooth flounder & SYN WCVI & 2010 & 1279\\
+\hline
+arrowtooth flounder & SYN WCVI & 2012 & 748\\
+\hline
+arrowtooth flounder & SYN WCVI & 2014 & 850\\
+\hline
+arrowtooth flounder & SYN WCVI & 2016 & 411\\
+\hline
+arrowtooth flounder & SYN WCVI & 2018 & 2082\\
+\hline
+arrowtooth flounder & SYN WCVI & 2021 & 764\\
+\hline
+arrowtooth flounder & SYN WCVI & 2022 & 1440\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2004 & 552\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2005 & 545\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2006 & 604\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2008 & 794\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2009 & 684\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2010 & 707\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2011 & 703\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2012 & 624\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2014 & 392\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2015 & 615\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2016 & 774\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2017 & 530\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2018 & 803\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2019 & 700\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2021 & 601\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2022 & 481\\
+\hline
+arrowtooth flounder & eastern Bering Sea & 2023 & 542\\
+\hline
+arrowtooth flounder & northern Bering Sea & 2021 & 6\\
+\hline
+\end{tabular}
+
+\subsection{Dover sole}\label{dover-sole}
+
+\begin{itemize}
+\tightlist
+\item
+  Remove Aleutian Islands
+\item
+  Remove all Bering Sea
+\end{itemize}
+
+\begin{tabular}[t]{l|l|r|r}
+\hline
+common\_name & survey & year & n\\
+\hline
+dover sole & Aleutian Islands & 2006 & 156\\
+\hline
+dover sole & Gulf of Alaska & 2003 & 508\\
+\hline
+dover sole & Gulf of Alaska & 2005 & 507\\
+\hline
+dover sole & Gulf of Alaska & 2007 & 504\\
+\hline
+dover sole & Gulf of Alaska & 2009 & 451\\
+\hline
+dover sole & Gulf of Alaska & 2011 & 472\\
+\hline
+dover sole & Gulf of Alaska & 2013 & 396\\
+\hline
+dover sole & Gulf of Alaska & 2015 & 740\\
+\hline
+dover sole & Gulf of Alaska & 2017 & 337\\
+\hline
+dover sole & Gulf of Alaska & 2019 & 331\\
+\hline
+dover sole & Gulf of Alaska & 2021 & 758\\
+\hline
+dover sole & Gulf of Alaska & 2023 & 304\\
+\hline
+dover sole & NWFSC.Combo & 2003 & 2922\\
+\hline
+dover sole & NWFSC.Combo & 2004 & 2250\\
+\hline
+dover sole & NWFSC.Combo & 2005 & 2496\\
+\hline
+dover sole & NWFSC.Combo & 2006 & 2144\\
+\hline
+dover sole & NWFSC.Combo & 2007 & 2133\\
+\hline
+dover sole & NWFSC.Combo & 2008 & 1067\\
+\hline
+dover sole & NWFSC.Combo & 2009 & 1051\\
+\hline
+dover sole & NWFSC.Combo & 2010 & 1162\\
+\hline
+dover sole & NWFSC.Combo & 2011 & 1080\\
+\hline
+dover sole & NWFSC.Combo & 2012 & 1089\\
+\hline
+dover sole & NWFSC.Combo & 2013 & 811\\
+\hline
+dover sole & NWFSC.Combo & 2014 & 1108\\
+\hline
+dover sole & NWFSC.Combo & 2015 & 1088\\
+\hline
+dover sole & NWFSC.Combo & 2016 & 1127\\
+\hline
+dover sole & NWFSC.Combo & 2017 & 1150\\
+\hline
+dover sole & NWFSC.Combo & 2018 & 1161\\
+\hline
+dover sole & NWFSC.Combo & 2019 & 566\\
+\hline
+dover sole & NWFSC.Combo & 2021 & 1118\\
+\hline
+dover sole & NWFSC.Combo & 2022 & 1058\\
+\hline
+dover sole & NWFSC.Combo & 2023 & 1099\\
+\hline
+dover sole & SYN HS & 2005 & 516\\
+\hline
+dover sole & SYN HS & 2007 & 932\\
+\hline
+dover sole & SYN HS & 2009 & 920\\
+\hline
+dover sole & SYN HS & 2011 & 1183\\
+\hline
+dover sole & SYN HS & 2013 & 707\\
+\hline
+dover sole & SYN HS & 2015 & 1114\\
+\hline
+dover sole & SYN HS & 2017 & 841\\
+\hline
+dover sole & SYN HS & 2019 & 1434\\
+\hline
+dover sole & SYN HS & 2021 & 1577\\
+\hline
+dover sole & SYN HS & 2023 & 1463\\
+\hline
+dover sole & SYN QCS & 2003 & 637\\
+\hline
+dover sole & SYN QCS & 2004 & 837\\
+\hline
+dover sole & SYN QCS & 2005 & 676\\
+\hline
+dover sole & SYN QCS & 2007 & 545\\
+\hline
+dover sole & SYN QCS & 2009 & 563\\
+\hline
+dover sole & SYN QCS & 2011 & 1800\\
+\hline
+dover sole & SYN QCS & 2013 & 1523\\
+\hline
+dover sole & SYN QCS & 2015 & 1659\\
+\hline
+dover sole & SYN QCS & 2017 & 1292\\
+\hline
+dover sole & SYN QCS & 2019 & 2003\\
+\hline
+dover sole & SYN QCS & 2021 & 2138\\
+\hline
+dover sole & SYN QCS & 2023 & 2390\\
+\hline
+dover sole & SYN WCHG & 2006 & 427\\
+\hline
+dover sole & SYN WCHG & 2007 & 624\\
+\hline
+dover sole & SYN WCHG & 2008 & 512\\
+\hline
+dover sole & SYN WCHG & 2010 & 395\\
+\hline
+dover sole & SYN WCHG & 2012 & 595\\
+\hline
+dover sole & SYN WCHG & 2014 & 590\\
+\hline
+dover sole & SYN WCHG & 2016 & 503\\
+\hline
+dover sole & SYN WCHG & 2018 & 757\\
+\hline
+dover sole & SYN WCHG & 2022 & 890\\
+\hline
+dover sole & SYN WCVI & 2004 & 433\\
+\hline
+dover sole & SYN WCVI & 2006 & 488\\
+\hline
+dover sole & SYN WCVI & 2008 & 1606\\
+\hline
+dover sole & SYN WCVI & 2010 & 440\\
+\hline
+dover sole & SYN WCVI & 2012 & 890\\
+\hline
+dover sole & SYN WCVI & 2014 & 789\\
+\hline
+dover sole & SYN WCVI & 2016 & 852\\
+\hline
+dover sole & SYN WCVI & 2018 & 3121\\
+\hline
+dover sole & SYN WCVI & 2021 & 921\\
+\hline
+dover sole & SYN WCVI & 2022 & 1689\\
+\hline
+\end{tabular}
+
+\subsection{Shortspine thornyead}\label{shortspine-thornyead}
+
+\begin{itemize}
+\item
+  Remove Bering Sea Slope (only 1 year)
+\item
+  Remove all Bering Sea (no data)
+\item
+  Hecate Strait no data before 2011\ldots{}
+\item
+  Queen Charlotte Sound no data before 2009\ldots{}
+\item
+  Haida Gwaii and Vancouver Island no data before 2010\ldots{}
+\end{itemize}
+
+\begin{tabular}[t]{l|l|r|r}
+\hline
+common\_name & survey & year & n\\
+\hline
+shortspine thornyhead & Aleutian Islands & 2004 & 754\\
+\hline
+shortspine thornyhead & Aleutian Islands & 2006 & 628\\
+\hline
+shortspine thornyhead & Aleutian Islands & 2010 & 521\\
+\hline
+shortspine thornyhead & Aleutian Islands & 2014 & 455\\
+\hline
+shortspine thornyhead & Aleutian Islands & 2016 & 515\\
+\hline
+shortspine thornyhead & Aleutian Islands & 2018 & 310\\
+\hline
+shortspine thornyhead & Aleutian Islands & 2022 & 355\\
+\hline
+shortspine thornyhead & Bering Sea Slope & 2004 & 788\\
+\hline
+shortspine thornyhead & Gulf of Alaska & 2003 & 681\\
+\hline
+shortspine thornyhead & Gulf of Alaska & 2005 & 720\\
+\hline
+shortspine thornyhead & Gulf of Alaska & 2007 & 644\\
+\hline
+shortspine thornyhead & Gulf of Alaska & 2009 & 532\\
+\hline
+shortspine thornyhead & Gulf of Alaska & 2011 & 365\\
+\hline
+shortspine thornyhead & Gulf of Alaska & 2013 & 518\\
+\hline
+shortspine thornyhead & Gulf of Alaska & 2015 & 660\\
+\hline
+shortspine thornyhead & Gulf of Alaska & 2017 & 411\\
+\hline
+shortspine thornyhead & Gulf of Alaska & 2019 & 396\\
+\hline
+shortspine thornyhead & Gulf of Alaska & 2021 & 416\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2004 & 1371\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2005 & 1287\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2006 & 1180\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2007 & 1232\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2008 & 1229\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2009 & 1146\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2010 & 1164\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2011 & 1108\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2012 & 1062\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2013 & 744\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2014 & 1175\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2015 & 1080\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2016 & 932\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2017 & 955\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2018 & 690\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2019 & 317\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2021 & 669\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2022 & 581\\
+\hline
+shortspine thornyhead & NWFSC.Combo & 2023 & 624\\
+\hline
+shortspine thornyhead & SYN HS & 2011 & 178\\
+\hline
+shortspine thornyhead & SYN HS & 2013 & 236\\
+\hline
+shortspine thornyhead & SYN HS & 2015 & 84\\
+\hline
+shortspine thornyhead & SYN HS & 2017 & 233\\
+\hline
+shortspine thornyhead & SYN HS & 2019 & 318\\
+\hline
+shortspine thornyhead & SYN HS & 2021 & 165\\
+\hline
+shortspine thornyhead & SYN HS & 2023 & 410\\
+\hline
+shortspine thornyhead & SYN QCS & 2009 & 714\\
+\hline
+shortspine thornyhead & SYN QCS & 2011 & 1629\\
+\hline
+shortspine thornyhead & SYN QCS & 2013 & 1600\\
+\hline
+shortspine thornyhead & SYN QCS & 2015 & 1619\\
+\hline
+shortspine thornyhead & SYN QCS & 2017 & 1662\\
+\hline
+shortspine thornyhead & SYN QCS & 2019 & 1548\\
+\hline
+shortspine thornyhead & SYN QCS & 2021 & 1497\\
+\hline
+shortspine thornyhead & SYN QCS & 2023 & 1425\\
+\hline
+shortspine thornyhead & SYN WCHG & 2010 & 1269\\
+\hline
+shortspine thornyhead & SYN WCHG & 2012 & 2058\\
+\hline
+shortspine thornyhead & SYN WCHG & 2014 & 1020\\
+\hline
+shortspine thornyhead & SYN WCHG & 2016 & 2250\\
+\hline
+shortspine thornyhead & SYN WCHG & 2018 & 2668\\
+\hline
+shortspine thornyhead & SYN WCHG & 2022 & 2561\\
+\hline
+shortspine thornyhead & SYN WCVI & 2010 & 177\\
+\hline
+shortspine thornyhead & SYN WCVI & 2012 & 179\\
+\hline
+shortspine thornyhead & SYN WCVI & 2014 & 178\\
+\hline
+shortspine thornyhead & SYN WCVI & 2016 & 126\\
+\hline
+shortspine thornyhead & SYN WCVI & 2018 & 962\\
+\hline
+shortspine thornyhead & SYN WCVI & 2021 & 136\\
+\hline
+shortspine thornyhead & SYN WCVI & 2022 & 529\\
+\hline
+\end{tabular}
+
+\subsection{Pacific ocean perch}\label{pacific-ocean-perch}
+
+\begin{itemize}
+\tightlist
+\item
+  Bering Sea Slope (no data after 2016)
+\item
+  Remove Bering Sea (no data)
+\end{itemize}
+
+\begin{tabular}[t]{l|l|r|r}
+\hline
+common\_name & survey & year & n\\
+\hline
+pacific ocean perch & Aleutian Islands & 2004 & 971\\
+\hline
+pacific ocean perch & Aleutian Islands & 2006 & 1036\\
+\hline
+pacific ocean perch & Aleutian Islands & 2010 & 951\\
+\hline
+pacific ocean perch & Aleutian Islands & 2012 & 1143\\
+\hline
+pacific ocean perch & Aleutian Islands & 2014 & 1083\\
+\hline
+pacific ocean perch & Aleutian Islands & 2016 & 1058\\
+\hline
+pacific ocean perch & Aleutian Islands & 2018 & 898\\
+\hline
+pacific ocean perch & Aleutian Islands & 2022 & 1184\\
+\hline
+pacific ocean perch & Bering Sea Slope & 2004 & 423\\
+\hline
+pacific ocean perch & Bering Sea Slope & 2008 & 404\\
+\hline
+pacific ocean perch & Bering Sea Slope & 2010 & 440\\
+\hline
+pacific ocean perch & Bering Sea Slope & 2012 & 466\\
+\hline
+pacific ocean perch & Bering Sea Slope & 2016 & 385\\
+\hline
+pacific ocean perch & Gulf of Alaska & 2003 & 1315\\
+\hline
+pacific ocean perch & Gulf of Alaska & 2005 & 1483\\
+\hline
+pacific ocean perch & Gulf of Alaska & 2007 & 1166\\
+\hline
+pacific ocean perch & Gulf of Alaska & 2009 & 418\\
+\hline
+pacific ocean perch & Gulf of Alaska & 2011 & 2383\\
+\hline
+pacific ocean perch & Gulf of Alaska & 2013 & 1287\\
+\hline
+pacific ocean perch & Gulf of Alaska & 2015 & 1118\\
+\hline
+pacific ocean perch & Gulf of Alaska & 2017 & 1073\\
+\hline
+pacific ocean perch & Gulf of Alaska & 2019 & 1209\\
+\hline
+pacific ocean perch & Gulf of Alaska & 2021 & 1139\\
+\hline
+pacific ocean perch & Gulf of Alaska & 2023 & 955\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2003 & 371\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2004 & 163\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2005 & 257\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2006 & 230\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2007 & 438\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2008 & 328\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2009 & 297\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2010 & 575\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2011 & 672\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2012 & 693\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2013 & 553\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2014 & 589\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2015 & 826\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2016 & 770\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2017 & 773\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2018 & 531\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2019 & 291\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2021 & 630\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2022 & 920\\
+\hline
+pacific ocean perch & NWFSC.Combo & 2023 & 662\\
+\hline
+pacific ocean perch & SYN HS & 2005 & 254\\
+\hline
+pacific ocean perch & SYN HS & 2007 & 348\\
+\hline
+pacific ocean perch & SYN HS & 2009 & 164\\
+\hline
+pacific ocean perch & SYN HS & 2011 & 226\\
+\hline
+pacific ocean perch & SYN HS & 2013 & 284\\
+\hline
+pacific ocean perch & SYN HS & 2015 & 269\\
+\hline
+pacific ocean perch & SYN HS & 2017 & 342\\
+\hline
+pacific ocean perch & SYN HS & 2019 & 618\\
+\hline
+pacific ocean perch & SYN HS & 2021 & 567\\
+\hline
+pacific ocean perch & SYN HS & 2023 & 827\\
+\hline
+pacific ocean perch & SYN QCS & 2003 & 2834\\
+\hline
+pacific ocean perch & SYN QCS & 2004 & 1642\\
+\hline
+pacific ocean perch & SYN QCS & 2005 & 1565\\
+\hline
+pacific ocean perch & SYN QCS & 2007 & 2932\\
+\hline
+pacific ocean perch & SYN QCS & 2009 & 2274\\
+\hline
+pacific ocean perch & SYN QCS & 2011 & 2402\\
+\hline
+pacific ocean perch & SYN QCS & 2013 & 2066\\
+\hline
+pacific ocean perch & SYN QCS & 2015 & 2159\\
+\hline
+pacific ocean perch & SYN QCS & 2017 & 2487\\
+\hline
+pacific ocean perch & SYN QCS & 2019 & 3025\\
+\hline
+pacific ocean perch & SYN QCS & 2021 & 3132\\
+\hline
+pacific ocean perch & SYN QCS & 2023 & 3145\\
+\hline
+pacific ocean perch & SYN WCHG & 2006 & 1166\\
+\hline
+pacific ocean perch & SYN WCHG & 2007 & 1859\\
+\hline
+pacific ocean perch & SYN WCHG & 2008 & 1769\\
+\hline
+pacific ocean perch & SYN WCHG & 2010 & 2111\\
+\hline
+pacific ocean perch & SYN WCHG & 2012 & 1722\\
+\hline
+pacific ocean perch & SYN WCHG & 2014 & 1017\\
+\hline
+pacific ocean perch & SYN WCHG & 2016 & 2307\\
+\hline
+pacific ocean perch & SYN WCHG & 2018 & 2102\\
+\hline
+pacific ocean perch & SYN WCHG & 2022 & 2072\\
+\hline
+pacific ocean perch & SYN WCVI & 2004 & 420\\
+\hline
+pacific ocean perch & SYN WCVI & 2006 & 538\\
+\hline
+pacific ocean perch & SYN WCVI & 2008 & 996\\
+\hline
+pacific ocean perch & SYN WCVI & 2010 & 813\\
+\hline
+pacific ocean perch & SYN WCVI & 2012 & 872\\
+\hline
+pacific ocean perch & SYN WCVI & 2014 & 534\\
+\hline
+pacific ocean perch & SYN WCVI & 2016 & 846\\
+\hline
+pacific ocean perch & SYN WCVI & 2018 & 950\\
+\hline
+pacific ocean perch & SYN WCVI & 2021 & 570\\
+\hline
+pacific ocean perch & SYN WCVI & 2022 & 626\\
+\hline
+\end{tabular}
+
+\subsection{Pacific spiny dogfish}\label{pacific-spiny-dogfish}
+
+\begin{itemize}
+\tightlist
+\item
+  Remove Aleutians (only 1 year)
+\item
+  Gulf of Alaska: only 4 years of substantial data, and none after 2011
+  --\textgreater{} remove?
+\item
+  Hecate Strait no substantial data before 2009\ldots{}
+\item
+  Remove Haida Gwaii (too few observations)
+\end{itemize}
+
+\begin{tabular}[t]{l|l|r|r}
+\hline
+common\_name & survey & year & n\\
+\hline
+pacific spiny dogfish & Aleutian Islands & 2006 & 2\\
+\hline
+pacific spiny dogfish & Gulf of Alaska & 2003 & 372\\
+\hline
+pacific spiny dogfish & Gulf of Alaska & 2005 & 199\\
+\hline
+pacific spiny dogfish & Gulf of Alaska & 2007 & 365\\
+\hline
+pacific spiny dogfish & Gulf of Alaska & 2009 & 2\\
+\hline
+pacific spiny dogfish & Gulf of Alaska & 2011 & 169\\
+\hline
+pacific spiny dogfish & Gulf of Alaska & 2015 & 1\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2003 & 665\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2004 & 462\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2005 & 868\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2006 & 773\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2007 & 746\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2008 & 887\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2009 & 625\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2010 & 1027\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2011 & 638\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2012 & 560\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2013 & 286\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2014 & 468\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2015 & 350\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2016 & 290\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2017 & 227\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2018 & 332\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2019 & 187\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2021 & 312\\
+\hline
+pacific spiny dogfish & NWFSC.Combo & 2022 & 3\\
+\hline
+pacific spiny dogfish & SYN HS & 2007 & 1\\
+\hline
+pacific spiny dogfish & SYN HS & 2009 & 72\\
+\hline
+pacific spiny dogfish & SYN HS & 2011 & 443\\
+\hline
+pacific spiny dogfish & SYN HS & 2013 & 74\\
+\hline
+pacific spiny dogfish & SYN HS & 2015 & 79\\
+\hline
+pacific spiny dogfish & SYN HS & 2017 & 307\\
+\hline
+pacific spiny dogfish & SYN HS & 2019 & 101\\
+\hline
+pacific spiny dogfish & SYN HS & 2021 & 59\\
+\hline
+pacific spiny dogfish & SYN HS & 2023 & 246\\
+\hline
+pacific spiny dogfish & SYN QCS & 2004 & 118\\
+\hline
+pacific spiny dogfish & SYN QCS & 2005 & 69\\
+\hline
+pacific spiny dogfish & SYN QCS & 2007 & 2\\
+\hline
+pacific spiny dogfish & SYN QCS & 2009 & 311\\
+\hline
+pacific spiny dogfish & SYN QCS & 2011 & 315\\
+\hline
+pacific spiny dogfish & SYN QCS & 2013 & 324\\
+\hline
+pacific spiny dogfish & SYN QCS & 2015 & 75\\
+\hline
+pacific spiny dogfish & SYN QCS & 2017 & 428\\
+\hline
+pacific spiny dogfish & SYN QCS & 2019 & 209\\
+\hline
+pacific spiny dogfish & SYN QCS & 2021 & 195\\
+\hline
+pacific spiny dogfish & SYN QCS & 2023 & 47\\
+\hline
+pacific spiny dogfish & SYN WCHG & 2006 & 3\\
+\hline
+pacific spiny dogfish & SYN WCHG & 2012 & 28\\
+\hline
+pacific spiny dogfish & SYN WCHG & 2016 & 11\\
+\hline
+pacific spiny dogfish & SYN WCHG & 2018 & 2\\
+\hline
+pacific spiny dogfish & SYN WCHG & 2022 & 3\\
+\hline
+pacific spiny dogfish & SYN WCVI & 2006 & 78\\
+\hline
+pacific spiny dogfish & SYN WCVI & 2008 & 408\\
+\hline
+pacific spiny dogfish & SYN WCVI & 2010 & 975\\
+\hline
+pacific spiny dogfish & SYN WCVI & 2012 & 212\\
+\hline
+pacific spiny dogfish & SYN WCVI & 2014 & 177\\
+\hline
+pacific spiny dogfish & SYN WCVI & 2016 & 310\\
+\hline
+pacific spiny dogfish & SYN WCVI & 2018 & 1005\\
+\hline
+pacific spiny dogfish & SYN WCVI & 2021 & 101\\
+\hline
+pacific spiny dogfish & SYN WCVI & 2022 & 786\\
+\hline
+\end{tabular}
+
+
+
+
+\end{document}
