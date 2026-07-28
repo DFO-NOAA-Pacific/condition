@@ -1,0 +1,201 @@
+---
+title: "Investigating samples"
+format: 
+  html:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    code_folding: hide
+editor: source
+---
+# Synopsis
+Investigating different subsampling procedures for each region, comparing length distributions across surveys, deciding which surveys to remove from models due to data insufficiency.
+
+```{r echo=FALSE,warning = FALSE, message = FALSE}
+library(dplyr)
+library(ggplot2)
+library(transport)
+library(kableExtra)
+fish_all <- readRDS("fish_all.rds")
+```
+
+
+```{r echo = FALSE}
+s <- fish_all |> 
+  # filter(weight_kg > 0, length_cm > 0, !is.na(lon), !is.na(temp), 
+  #        year != 2020, sex %in% c("M", "F")) |>
+  # mutate(yearc = as.numeric(scale(year, center = T, scale = F)),
+  #        tempc = temp - mean(temp),
+  #        salinityc = salinity - mean(salinity),
+  #        lengthc = log(length_cm) - mean(log(length_cm),na.rm=TRUE)) |>
+  # filter(!survey %in% c("northern Bering Sea", "Bering Sea Slope")) |>
+  filter(!common_name %in% c("sablefish", "longspine thornyhead")) |>
+  #filter(!(common_name == "pacific spiny dogfish" & survey %in% c("Aleutian Islands", "SYN WCHG", "Gulf of Alaska"))) |>
+  #filter(!(common_name == "dover sole" & survey == "Aleutian Islands")) |>
+  mutate(type = case_when(
+    is.na(weight_kg) ~ "length-only",
+    !is.na(weight_kg) ~ "length + weight"
+  ))|>
+  mutate(survey2 = case_when(
+    survey == "NWFSC.Combo" ~ "West Coast",
+    survey == "SYN HS" ~ "Hecate Strait",
+    survey == "SYN QCS" ~ "Queen Charlotte Sound",
+    survey == "SYN WCHG" ~ "WC Haida Gwaii",
+    survey == "SYN WCVI" ~ "WC Vancouver Island",
+    .default = survey
+   ))
+
+ss <- s |> filter(weight_kg > 0, length_cm > 0, !is.na(lon), !is.na(temp), 
+          year != 2020, sex %in% c("M", "F"))
+# fish_all_clean$survey2 <- factor(fish_all_clean$survey2, levels = c("Aleutian Islands", "Bering Sea Slope", "northern Bering Sea", "eastern Bering Sea", "Gulf of Alaska", "Hecate Strait", "Queen Charlotte Sound", "WC Haida Gwaii", "WC Vancouver Island","West Coast"))
+```
+
+# Length distributions
+## Histogram by survey
+Do the length distributions of the length-only and length+weight data entries match? Where are areas with sparse data?
+
+- NWFSC only has observations with length+weight. Data is from the surveyjoin-db age_and_length.rds
+- AFSC mostly has observations with length+weight. Data is from surveyjoin-db afsc_specimen.rds
+- PBS has both types. Data is from fishyplots pbs-gfdata.rds
+
+Note: there are 23,895 rows removed from PBS due to missing length information, true for all following plots.
+
+```{r echo=FALSE,warning=FALSE,message=FALSE}
+ggplot(s, aes(x = length_cm, fill = type)) +
+  geom_histogram() +
+  facet_wrap(~survey) +
+  scale_fill_brewer(palette= "Dark2")+
+  theme_minimal()
+```
+## CDFs by survey
+
+Comparing CDFs (cumulative distribution functions) of length-only with length+weight fish entries, we see that
+
+- Alaska looks weird since there are relatively few length-only observations
+- The West Coast random subsampling is reflected
+- Canada maybe is slightly oversampling larger fish
+- Generally the length+weight CDFs for each region look pretty similar
+```{r echo=FALSE,warning=FALSE}
+s |> filter(!survey %in% c("northern Bering Sea", "Bering Sea Slope")) |>
+ggplot(aes(x = length_cm, color = type)) +
+  stat_ecdf() +
+  facet_wrap(~survey)+
+  scale_color_brewer(palette = "Dark2")+
+  theme_minimal()
+```
+## Density plots by survey
+Surveys with insufficient data are apparent here (eg. dogfish in Aleutians). Some surveys/species have notably bimodal-ish distributions.
+
+May need to look into depth gradients for each region. NWFSC is known for deeper depths, which may lead to sampling longer/bigger fish. There may be an example of this with shortspine thornyhead below.
+```{r echo=FALSE,warning=FALSE}
+# s |> filter(!survey %in% c("northern Bering Sea", "Bering Sea Slope")) |>
+# ggplot(aes(x = length_cm, color = type)) +
+#   geom_density() +
+#   facet_wrap(~survey2)+
+#   scale_color_brewer(palette = "Dark2")+
+#   theme_minimal()
+
+s |> filter(!survey %in% c("northern Bering Sea", "Bering Sea Slope"), !common_name %in% c("longspine thornyhead","sablefish")) |>
+ggplot(aes(x = length_cm, color = survey)) +
+  labs(color="survey")+
+  geom_density() +
+  facet_wrap(~common_name)+
+  scale_color_brewer(palette = "Dark2")+
+  theme_minimal()
+```
+
+### Depth gradients across regions
+Looks like NWFSC definitely does have much more of a right skew towards deeper depths, although it varies by species. Perhaps it is most notable for Shortspine thornyhead, where we also see a bit of right skew in the graph above.
+```{r echo=FALSE, warning=FALSE}
+s |> filter(!survey %in% c("northern Bering Sea", "Bering Sea Slope"), !common_name %in% c("longspine thornyhead","sablefish")) |>
+ggplot(aes(x = depth, color = region)) +
+  labs(color="survey")+
+  geom_density() +
+  facet_wrap(~common_name)+
+  scale_color_brewer(palette = "Dark2")+
+  theme_minimal()
+```
+
+## Distribution tests and CDF by species
+Wasserstein test: determine if two samples come from the same distribution. Quantifies the amount of transport you would need to get from one distribution to the other.
+
+Arrowtooth flounder, dover sole, and pacific ocean perch look pretty good.
+Dogfish and shortspine look less great. Dogfish in Alaska are very few samples.
+```{r echo =FALSE,warning=FALSE}
+s |>
+  filter(type == "length + weight") |>
+ggplot(aes(x = length_cm, color = region)) +
+  stat_ecdf() +
+  facet_wrap(~common_name)+
+  scale_color_brewer(palette = "Dark2")+
+  theme_minimal()
+
+for (i in list("arrowtooth flounder", "dover sole", "pacific spiny dogfish", "shortspine thornyhead", "pacific ocean perch")) {
+  ca1 <- ss |> filter(region == "pbs", common_name == i)|>pull(length_cm)
+  ca2 <- ss |> filter(region == "nwfsc",common_name == i) |>pull(length_cm)
+  ca3 <- ss |> filter(region == "afsc", common_name == i) |> pull(length_cm) 
+  message("Species: ", i, ". PBS sd: ", round(sd(ca1),2), ". AFSC sd: ", round(sd(ca3),2), ". NWFSC sd: ", round(sd(ca2),2))  
+  message("PBS and NWFSC: ", round(wasserstein1d(ca1,ca2,p=1),2), " cm.")
+  message("PBS and AFSC: ", round(wasserstein1d(ca1,ca3,p=1),2), " cm.")
+  message("NWFSC and AFSC: ", round(wasserstein1d(ca2,ca3,p=1),2), " cm.")
+  message("")
+}
+```
+
+# Tables by year and survey - removing data insufficient surveys
+
+## Arrowtooth flounder
+- Remove northern Bering Sea (only 1 year)
+- Remove Bering Sea Slope (only 3 years)
+```{r echo=FALSE}
+ss |> 
+  filter(common_name == "arrowtooth flounder") |>
+  count(common_name,survey,year) |>kbl()
+```
+## Dover sole
+- Remove Aleutian Islands (only 1 year)
+- Remove all Bering Sea (no data)
+```{r echo=FALSE}
+ss |> 
+  filter(common_name == "dover sole") |>
+  count(common_name,survey,year) |>kbl()
+```
+
+## Shortspine thornyead
+- Remove Bering Sea Slope (only 1 year)
+- Remove all other Bering Sea (no data)
+
+- Hecate Strait no data before 2011...
+- Queen Charlotte Sound no data before 2009...
+- Haida Gwaii and Vancouver Island no data before 2010...
+```{r echo=FALSE}
+ss |> 
+  filter(common_name == "shortspine thornyhead") |>
+  count(common_name,survey,year) |>kbl()
+```
+
+## Pacific ocean perch
+- Remove Bering Sea Slope (no data after 2016)
+- Remove all other Bering Sea (no data)
+```{r echo=FALSE}
+ss |> 
+  filter(common_name == "pacific ocean perch") |>
+  count(common_name,survey,year) |>kbl()
+```
+
+## Pacific spiny dogfish
+- Remove Aleutians (only 1 year)
+- Remove Gulf of Alaska (only 4 years of substantial data, and none after 2011)
+- Remove Haida Gwaii (too few observations)
+- Hecate Strait no substantial data before 2009...
+```{r echo=FALSE}
+ss |> 
+  filter(common_name == "pacific spiny dogfish") |>
+  count(common_name,survey,year) |>kbl()
+```
+
+
+
