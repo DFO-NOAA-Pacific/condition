@@ -124,7 +124,6 @@ lats <- st_dimensions(glorys)$y$offset +
 # Depth vector can just be extracted from the stars dimensions
 depths <- as.numeric(st_dimensions(glorys)$depth$values$start)
 
-
 # Empty data frame for joined data
 joined <- data.frame()
 
@@ -181,7 +180,7 @@ joined_clean <- joined |>
   mutate(temp = drop_units(temp),
          o2 = drop_units(o2),
          phyto = drop_units(phyto)) |>
-  mutate(lon = ifelse(lon > 180, -360 + lon, lon))
+  mutate(lon = ifelse(lon > 180, -360 + lon, lon)) # converting lon vals back to original formatting
          #npp = drop_units(npp))
 
 fishies_plus <- left_join(afsc_subset, joined_clean, by = join_by(Trawl_id)) |> 
