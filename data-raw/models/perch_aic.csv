@@ -1,0 +1,15 @@
+model,aic,converged,sanity_ok,note,formula,timestamp
+base_re,-205820.888252642,TRUE,TRUE,NA,log(weight_kg) ~ log_length * as.factor(region) + as.factor(year) + as.factor(sex) + (1 | trawl_id),NA
+temp_svc,-196342.1531637501,TRUE,TRUE,NA,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + tempc,NA
+temp_region2,-195939.2289577168,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(sex) + s(tempc, k = 4, by = region)",NA
+temp_region,-195923.49080667095,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4, by = region)",NA
+base_centered,-195607.0817857191,TRUE,TRUE,,log(weight_kg) ~ log_lengthc * as.factor(region) + as.factor(year) + as.factor(sex),2026-08-10 12:49:16
+temp,-195604.4344830318,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4)",NA
+salinity,-195503.79251990595,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(salinityc, k = 4)",NA
+base,-195420.1070448568,TRUE,TRUE,NA,log(weight_kg) ~ log_length * as.factor(region) + as.factor(year) + as.factor(sex),NA
+st_removal,-191269.6866277476,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4)",NA
+temp_salinity,NA,NA,FALSE,hessian_ok; gradients_ok; se_na_ok; all_ok,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
+year_removal,NA,NA,FALSE,hessian_ok; nlminb_ok; se_na_ok; sigmas_ok; all_ok,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(sex) + s(tempc, k = 4)",NA
+spline_removal,NA,NA,FALSE,hessian_ok; se_na_ok; sigmas_ok; all_ok,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + salinityc,NA
+diffusion1,NA,NA,FALSE,hessian_ok; gradients_ok; se_na_ok; all_ok,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex),NA
+diffusion2,NA,NA,FALSE,hessian_ok; nlminb_ok; gradients_ok; se_na_ok; all_ok,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex),NA

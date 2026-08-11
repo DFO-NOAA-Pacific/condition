@@ -4,6 +4,8 @@
 .Ruserdata
 *.png
 data-raw/glorys/*.nc
-data-raw/models/*
+data-raw/models/*.rds
 presentation*
 figures*
+data-raw/*.html
+data-raw/*_files

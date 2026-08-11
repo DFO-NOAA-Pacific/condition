@@ -3,10 +3,16 @@ title: "all_species"
 format: html
 editor: source
 ---
-Notes: switch to student t (can fix df at 2 but try 3 or 4, if convergence issues then try to fix at 3 or 4 and rerun to solve qqplot), take out centered log length
+Notes:
+- time series for each survey for st effect, averg across year for each survey domain
+- Experiment with diffusion
+- Add trawl id as random effect.
+- Put date/time as column in aic table
+
 # Imports
 ```{r warning = FALSE, message = FALSE}
 library(sdmTMB)
+library(readr)
 library(ggplot2)
 library(surveyjoin)
 library(stats)
@@ -26,24 +32,6 @@ RhpcBLASctl::omp_set_num_threads(1)
 options(scipen = 999)
 ```
 
-```{r}
-# Get base maps
-states <- ne_download(scale = 50, type = "states", category = "cultural", returnclass = "sf")
-states <- states |> filter(admin == "United States of America")
-canada <- ne_download(scale = 50, type = "states", category = "cultural", returnclass = "sf")
-canada <- canada |> filter(admin == "Canada") |> select(name, geometry)
-mexico <- ne_countries(scale = "medium", returnclass = "sf", country = "mexico") |> 
-  select(name = admin, geometry)
-alaska <- states |> filter(.data$name == "Alaska")
-
-# Combine, get equal areas crs, crop
-proj <- bind_rows(states, canada, mexico, alaska) |>
-  st_transform(4326) |>
-  st_crop(c(xmin = -170, ymin = 25, xmax = -115, ymax = 65)) |>
-  st_transform(3338)
-rm(states, canada, mexico, alaska)
-```
-
 # Data cleaning
 ```{r}
 # Biological data
@@ -57,7 +45,7 @@ fish_all_clean <- fish_all |>
   filter(!common_name %in% c("sablefish", "longspine thornyhead")) |>
   filter(!(common_name == "pacific spiny dogfish" & survey %in% c("Aleutian Islands", "SYN WCHG", "Gulf of Alaska"))) |>
   filter(!(common_name == "dover sole" & survey == "Aleutian Islands"))
-
+rm(fish_all)
 ```
 
 # Comparing 4 model structures
@@ -130,11 +118,11 @@ AIC(perch[[1]], perch[[2]], perch[[3]],perch[[4]]) |> arrange(AIC)
 
 # Base model (B)
 ```{r}
-fsh_b <- function(species, cutoff, center = TRUE, dist = c("gaussian", "student"), df = NULL, link = "identity") {
+fsh_b <- function(species, cutoff, center = TRUE, dist = c("gaussian", "student")) {
   dist <- match.arg(dist)
   fam <- switch(dist, 
-                gaussian = gaussian(link = link),
-                student = student(link = link, df = df))
+                gaussian = gaussian(link = "identity"),
+                student = student(link = "identity", df = NULL))
   
   # Center variables (species-specific)
   a <- fish_all_clean |> 
@@ -208,11 +196,11 @@ dogfish <- sdmTMB(log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(yea
 ############################
 
 # Run models
-arrowtooth <- fsh_b("arrowtooth flounder", 100, dist = "student")
-dover <-  fsh_b("dover sole", cutoff = 74) 
-#dogfish <- fsh_b("pacific spiny dogfish", cutoff = 35) 
-shortspine <- fsh_b("shortspine thornyhead", cutoff = 86, dist = "student")
-perch <- fsh_b("pacific ocean perch", cutoff = 75)
+# arrowtooth <- fsh_b("arrowtooth flounder", 100, dist = "student")
+# dover <-  fsh_b("dover sole", cutoff = 74) 
+# #dogfish <- fsh_b("pacific spiny dogfish", cutoff = 35) 
+# shortspine <- fsh_b("shortspine thornyhead", cutoff = 86, dist = "student")
+# perch <- fsh_b("pacific ocean perch", cutoff = 75)
 
 # Save models
 saveRDS(arrowtooth, "models/arrowtooth.rds")
@@ -236,6 +224,31 @@ Shortspine -- remove all Bering Sea
 Dogfish -- remove all Alaska, Haida Gwaii
 Perch -- remove all Bering Sea, remove southern California (lat < 40)
 ```{r}
+# Get base maps
+states <- ne_download(scale = 50, type = "states", category = "cultural", returnclass = "sf")
+states <- states |> filter(admin == "United States of America")
+canada <- ne_download(scale = 50, type = "states", category = "cultural", returnclass = "sf")
+canada <- canada |> filter(admin == "Canada") |> select(name, geometry)
+mexico <- ne_countries(scale = "medium", returnclass = "sf", country = "mexico") |> 
+  select(name = admin, geometry)
+alaska <- states |> filter(.data$name == "Alaska")
+
+# Combine, get equal areas crs, crop
+proj <- bind_rows(states, canada, mexico, alaska) |>
+  st_transform(4326) |>
+  st_crop(c(xmin = -170, ymin = 25, xmax = -115, ymax = 65)) |>
+  st_transform(3338)
+rm(states, canada, mexico, alaska)
+gc()
+```
+
+```{r}
+fsh_env("arrowtooth flounder", "arrowtooth", vars = c("base_centered"), dist = "student", save_models = TRUE)
+fsh_env("dover sole", "dover", vars = c("base_centered"), save_models = TRUE)
+fsh_env("shortspine thornyhead", "shortspine", vars = c("base_centered"), dist = "student", save_models = TRUE)
+fsh_env("pacific ocean perch", "perch", vars = c("base_centered"), save_models = TRUE)
+
+
 predictr <- function(model) {
   # Get grids from surveyjoin and combine, removing species-specific data-sparse areas
   grid <- bind_rows(surveyjoin::nwfsc_grid, surveyjoin::dfo_synoptic_grid, surveyjoin::afsc_grid) |>
@@ -276,9 +289,11 @@ predictr <- function(model) {
     mutate(x = st_coordinates(geometry)[,1],
            y = st_coordinates(geometry)[,2]) |>
     st_drop_geometry()
+  rm(grid)
+  gc()
 }
 
-arrowtooth_pred <- predictr(arrowtooth)
+arrowtooth_pred <- predictr(arrowtooth$base_centered)
 dover_pred <- predictr(dover)
 dogfish_pred <- predictr(dogfish)
 perch_pred <- predictr(perch)
@@ -327,46 +342,170 @@ ggsave("figures/test_spatial_trends.png", j, width = 12, height = 18)
 
 # Environmental covariates
 ```{r}
-fsh_env <- function(species, cutoff, obj_name, vars = c("temp", "salinity", "both", "year_removal", "st_removal", "temp_region", "spline_removal"), center = TRUE, dist = c("gaussian", "student"), df = NULL, link = "identity") {
+check_aic <- function(model_list, aic_table = NULL, model_list_name = NULL) {
+
+  # If not being called within the fsh() then dynamically name outgoing object
+  if (is.null(model_list_name)) {
+    model_list_name <- deparse(substitute(model_list))
+  }
   
-  # Dynamically update distribution
-  dist <- match.arg(dist)
-  fam <- switch(dist, 
-                gaussian = gaussian(link = link),
-                student = student(link = link, df = df))
+  # Loop through models in list and perform sanity check + AIC calculation
+  results <- lapply(names(model_list), function(nm) {
+    mod <- model_list[[nm]]
+
+    if (is.null(mod) || !inherits(mod, "sdmTMB")) {
+      message(sprintf("Skipping '%s': not a valid sdmTMB object", nm))
+      return(data.frame(model = nm, aic = NA_real_, converged = NA,
+                        sanity_ok = NA, note = "not a valid model object",
+                        formula = NA,
+                        timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+    }
+
+    sanity_res <- suppressMessages(suppressWarnings(sanity(mod, silent = TRUE)))
+    sanity_ok <- isTRUE(sanity_res$all_ok)
+
+    if (!sanity_ok) {
+      failed_checks <- names(sanity_res)[vapply(sanity_res, isFALSE, logical(1))]
+      message(sprintf("Skipping '%s': failed sanity checks: %s",
+                       nm, paste(failed_checks, collapse = ", ")))
+      return(data.frame(model = nm, aic = NA_real_, converged = NA,
+                         sanity_ok = FALSE,
+                         note = paste(failed_checks, collapse = "; "),
+                        formula = as.character(mod$formula),
+                        timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+    }
+
+    aic_val <- tryCatch(
+      AIC(mod),
+      error = function(e) NA_real_,
+      warning = function(w) NA_real_
+    )
+
+    data.frame(model = nm, aic = aic_val, converged = TRUE,
+               sanity_ok = TRUE, note = ifelse(is.na(aic_val), "AIC() failed", ""),
+               formula = as.character(mod$formula),
+               timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+  })
+
+  # Attach all results rows in order of descending AIC
+  out <- do.call(bind_rows, results)
+  out <- out[order(out$aic), ]
+  rownames(out) <- NULL
   
-  # Center variables (species-specific)
-  a <- fish_all_clean |> 
-    filter(common_name == species) |>
-    mutate(yearc = as.numeric(scale(year, center = T, scale = F)),
-           tempc = temp - mean(temp),
-           salinityc = salinity - mean(salinity),
-           log_length = log(length_cm),
-           log_lengthc = log_length - mean(log_length))
+  # If there is an existing table, attach that and order by descending AIC
+  if (!is.null(aic_table)) {
+    aic_table <- aic_table |> filter(!model %in% c(out$model))
+    out <- bind_rows(aic_table, out)
+    out <- out[order(out$aic), ]
+  }
+  write_csv(out, paste0("models/", model_list_name, "_aic.csv")) 
+}
+```
+
+```{r}
+
+fsh_env <- function(species, obj_name, vars = c(NULL, "base", "base_re", "base_centered", "temp", "salinity", "temp_salinity", "year_removal", "st_removal", "temp_region", "temp_region2", "spline_removal", "temp_svc", "diffusion1", "diffusion2"), center = FALSE, dist = c("gaussian", "student"), save_models = FALSE) {
   
-  # Preprocessing --> removing entries beyond -3/3 SDs from the mean residual
-  a1 <- lm(log(weight_kg) ~ log(length_cm), data = a)
-  a <- a |>
-    mutate(residuals = residuals(a1)) |>
-    mutate(over_3sd = abs(residuals - mean(residuals)) > 3*sd(residuals))
-  message("Residuals > 3 SD from mean: ", sum(a$over_3sd), " (", round(sum(a$over_3sd)/nrow(a),3), "%)")
-  a <- a|> filter(over_3sd == FALSE)
-  
-  # Make mesh
-  a <- sdmTMB::add_utm_columns(a, ll_names = c("lon", "lat"), utm_crs = 3338)
-  mesh <- sdmTMB::make_mesh(a, xy_cols = c("X","Y"), cutoff = cutoff)
-  message("Mesh: ", mesh$mesh$n, ".")
+  if (length(vars) > 0) {
+    # Dynamically update distribution
+    dist <- match.arg(dist)
+    fam <- switch(dist, 
+                  gaussian = gaussian(link = "identity"),
+                  student = student(link = "identity", df = NULL))
+    
+    # Dynamically update cutoff value
+    cutoff <- switch(species,
+                     "arrowtooth flounder" = 100,
+                     "dover sole" = 74,
+                     "pacific spiny dogfish" = 35,
+                     "shortspine thornyhead" = 86,
+                     "pacific ocean perch" = 75)
+    
+    # Center variables (species-specific)
+    a <- fish_all_clean |> 
+      filter(common_name == species) |>
+      mutate(yearc = as.numeric(scale(year, center = T, scale = F)),
+             tempc = temp - mean(temp),
+             salinityc = salinity - mean(salinity),
+             log_length = log(length_cm),
+             log_lengthc = log_length - mean(log_length))
+    
+    if (center == TRUE) {
+      a$length_var <- a$log_lengthc
+    } else {
+      a$length_var <- a$log_length
+    }
+    
+    # Preprocessing --> removing entries beyond -3/3 SDs from the mean residual
+    a1 <- lm(log(weight_kg) ~ log(length_cm), data = a)
+    a <- a |>
+      mutate(residuals = residuals(a1)) |>
+      mutate(over_3sd = abs(residuals - mean(residuals)) > 3*sd(residuals))
+    message("Residuals > 3 SD from mean: ", sum(a$over_3sd), " (", round(sum(a$over_3sd)/nrow(a),3), "%)")
+    a <- a|> filter(over_3sd == FALSE)
+    
+    # Make mesh
+    if ("diffusion2" %in% vars) {
+      missing_year <- data.frame(year = 2020, lon = -179, lat = 70)
+      a <- a |> bind_rows(missing_year)
+    }
+    
+    a <- sdmTMB::add_utm_columns(a, ll_names = c("lon", "lat"), utm_crs = 3338)
+    mesh <- sdmTMB::make_mesh(a, xy_cols = c("X","Y"), cutoff = cutoff)
+    message("Mesh: ", mesh$mesh$n, ".")
+  }
   
   # Create empty results list
   results <- list()
   
-  # add temperature
-  if ("temp" %in% vars) {
-  message("Modeling ", species, " temperature only...")
-  results$temp <- try(sdmTMB(log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc,k=4),
+  # base
+  if ("base" %in% vars) {
+    message("Modeling ", species, " base...")
+    results$base <- try(sdmTMB(log(weight_kg) ~ log_length*as.factor(region) + as.factor(year) + as.factor(sex),
+              mesh = mesh,
+              spatial = "on",
+              spatial_varying = ~ log_length,
+              time = "year",
+              spatiotemporal = "rw",
+              anisotropy = TRUE,
+              data = a,
+              family = fam))
+  }
+  
+  if ("base_re" %in% vars) {
+    message("Modeling ", species, " base...")
+    results$base_re <- try(sdmTMB(log(weight_kg) ~ log_length*as.factor(region) + as.factor(year) + as.factor(sex) + (1|trawl_id),
+              mesh = mesh,
+              spatial = "on",
+              spatial_varying = ~ log_length,
+              time = "year",
+              spatiotemporal = "rw",
+              anisotropy = TRUE,
+              data = a,
+              family = fam))
+  }
+  
+  
+  if ("base_centered" %in% vars) {
+    message("Modeling ", species, " base (centered log_length)...")
+    results$base_centered <- try(sdmTMB(log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(year) + as.factor(sex),
               mesh = mesh,
               spatial = "on",
               spatial_varying = ~ log_lengthc,
+              time = "year",
+              spatiotemporal = "rw",
+              anisotropy = TRUE,
+              data = a,
+              family = fam))
+  }
+  
+  # add temperature
+  if ("temp" %in% vars) {
+  message("Modeling ", species, " temperature only...")
+  results$temp <- try(sdmTMB(log(weight_kg) ~ length_var*as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc,k=4),
+              mesh = mesh,
+              spatial = "on",
+              spatial_varying = ~ length_var,
               time = "year",
               spatiotemporal = "rw",
               anisotropy = TRUE,
@@ -377,11 +516,11 @@ fsh_env <- function(species, cutoff, obj_name, vars = c("temp", "salinity", "bot
   # add salinity
   if ("salinity" %in% vars) {
   message("Modeling ", species, " salinity only...")
-  results$salinity <- try(sdmTMB(log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(year) + as.factor(sex)+
+  results$salinity <- try(sdmTMB(log(weight_kg) ~ length_var*as.factor(region) + as.factor(year) + as.factor(sex)+
                      s(salinityc,k=4),
               mesh = mesh,
               spatial = "on",
-              spatial_varying = ~ log_lengthc,
+              spatial_varying = ~ length_var,
               time = "year",
               spatiotemporal = "rw",
               anisotropy = TRUE,
@@ -390,12 +529,12 @@ fsh_env <- function(species, cutoff, obj_name, vars = c("temp", "salinity", "bot
   } 
   
   # both
-  if ("both" %in% vars) {
+  if ("temp_salinity" %in% vars) {
   message("Modeling ", species, " temperature and salinity...")
-  results$temp_salinity <- try(sdmTMB(log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc,k=4)+ s(salinityc,k=4),
+  results$temp_salinity <- try(sdmTMB(log(weight_kg) ~ length_var*as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc,k=4)+ s(salinityc,k=4),
               mesh = mesh,
               spatial = "on",
-              spatial_varying = ~ log_lengthc,
+              spatial_varying = ~ length_var,
               time = "year",
               spatiotemporal = "rw",
               anisotropy = TRUE,
@@ -407,15 +546,15 @@ fsh_env <- function(species, cutoff, obj_name, vars = c("temp", "salinity", "bot
   if ("year_removal" %in% vars) {
   message("Modeling ", species, " year removal...")
   if (species %in% c("pacific ocean perch")) {
-    formula <- log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(sex) + s(tempc,k=4)
+    formula <- log(weight_kg) ~ length_var*as.factor(region) + as.factor(sex) + s(tempc,k=4)
   } else {
-    formula <- log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(sex) + s(tempc,k=4) + s(salinityc,k=4)
+    formula <- log(weight_kg) ~ length_var*as.factor(region) + as.factor(sex) + s(tempc,k=4) + s(salinityc,k=4)
   }
   
   results$year_removal <- try(sdmTMB(formula = formula,
               mesh = mesh,
               spatial = "on",
-              spatial_varying = ~ log_lengthc,
+              spatial_varying = ~ length_var,
               time = "year",
               spatiotemporal = "rw",
               anisotropy = TRUE,
@@ -427,15 +566,15 @@ fsh_env <- function(species, cutoff, obj_name, vars = c("temp", "salinity", "bot
   if ("st_removal" %in% vars) {
   message("Modeling ", species, " spatiotemporal removal...")
   if (species %in% c("pacific ocean perch")) {
-    formula <- log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc,k=4)
+    formula <- log(weight_kg) ~ length_var*as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc,k=4)
   } else {
-    formula <- log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc,k=4) + s(salinityc,k=4)
+    formula <- log(weight_kg) ~ length_var*as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc,k=4) + s(salinityc,k=4)
   }
   
   results$st_removal <- try(sdmTMB(formula = formula,
               mesh = mesh,
               spatial = "on",
-              spatial_varying = ~ log_lengthc,
+              spatial_varying = ~ length_var,
               #time = "year",
               #spatiotemporal = "rw",
               anisotropy = TRUE,
@@ -446,23 +585,37 @@ fsh_env <- function(species, cutoff, obj_name, vars = c("temp", "salinity", "bot
   if ("temp_region" %in% vars) {
     message("Modeling ", species, " with temperature:region interaction...")
     a$region <- as.factor(a$region)
-    results$temp_region <- try(sdmTMB(log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc,k=4, by =region),
+    results$temp_region <- try(sdmTMB(log(weight_kg) ~ length_var*as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc,k=4, by =region),
                             mesh = mesh,
                             spatial = "on",
-                            spatial_varying = ~ log_lengthc,
+                            spatial_varying = ~ length_var,
                             time = "year",
                             spatiotemporal= "rw",
                             anisotropy = TRUE,
                             data = a,
               family = fam))
-  } 
+  }
+  
+  if ("temp_region2" %in% vars) {
+    message("Modeling ", species, " with temperature:region interaction with year removal...")
+    a$region <- as.factor(a$region)
+    results$temp_region2 <- try(sdmTMB(log(weight_kg) ~ length_var*as.factor(region) + as.factor(sex) + s(tempc,k=4, by =region),
+                            mesh = mesh,
+                            spatial = "on",
+                            spatial_varying = ~ length_var,
+                            time = "year",
+                            spatiotemporal= "rw",
+                            anisotropy = TRUE,
+                            data = a,
+              family = fam))
+  }
   
   if ("spline_removal" %in% vars) {
     message("Modeling ", species, " removing splines...")
-    results$spline_removal <- try(sdmTMB(log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(year) + as.factor(sex) + salinityc,
+    results$spline_removal <- try(sdmTMB(log(weight_kg) ~ length_var*as.factor(region) + as.factor(year) + as.factor(sex) + salinityc,
                             mesh = mesh,
                             spatial = "on",
-                            spatial_varying = ~ log_lengthc,
+                            spatial_varying = ~ length_var,
                             time = "year",
                             spatiotemporal= "rw",
                             anisotropy = TRUE,
@@ -470,15 +623,81 @@ fsh_env <- function(species, cutoff, obj_name, vars = c("temp", "salinity", "bot
               family = fam))
   } 
   
-  existing <- if (exists(obj_name, envir = .GlobalEnv, inherits = FALSE)) {
-    get(obj_name, envir = .GlobalEnv)
-  } else {
-    list()
+  if ("temp_svc" %in% vars) {
+    message("Modeling ", species, " temp as SVC...")
+    results$temp_svc <- try(sdmTMB(log(weight_kg) ~ length_var*as.factor(region) + as.factor(year) + as.factor(sex) + tempc,
+                            mesh = mesh,
+                            spatial = "on",
+                            spatial_varying = ~ length_var + tempc,
+                            time = "year",
+                            spatiotemporal= "rw",
+                            anisotropy = TRUE,
+                            data = a,
+              family = fam))
+  } 
+  
+  if ("diffusion1" %in% vars) {
+    message("Modeling ", species, " temp as spatial diffusion process...")
+    results$diffusion1 <- try(sdmTMB(log(weight_kg) ~ length_var*as.factor(region) + as.factor(year) + as.factor(sex),
+                            mesh = mesh,
+                            spatial = "on",
+                            spatial_varying = ~ length_var,
+                            nonlocal_formula = ~ diffusion(tempc),
+                            time = "year",
+                            spatiotemporal= "rw",
+                            anisotropy = TRUE,
+                            data = a,
+              family = fam))
   }
   
-  assign(obj_name, modifyList(existing, results), envir = .GlobalEnv)
-  invisible(get(obj_name, envir = .GlobalEnv))
+  if ("diffusion2" %in% vars) {
+    message("Modeling ", species, " temp as spatial and temporal diffusion process...")
+    
+    results$diffusion2 <- try(sdmTMB(log(weight_kg) ~ length_var*as.factor(region) + as.factor(year) + as.factor(sex),
+                            mesh = mesh,
+                            spatial = "on",
+                            spatial_varying = ~ length_var,
+                            nonlocal_formula = ~ time_lag(tempc),
+                            time = "year",
+                            spatiotemporal= "rw",
+                            anisotropy = TRUE,
+                            data = a,
+              family = fam))
+  }
   
+  # Getting the model object from env/files if no models are requested - only generate AIC table from existing list
+  if (length(vars) == 0 || length(results) == 0) {
+    message("No models called. Pulling existing models instead from environment...")
+    if (exists(obj_name, envir = .GlobalEnv, inherits = FALSE)) {
+         results <- get(obj_name, envir = .GlobalEnv)
+       } else {
+         message("No existing models found in environment. Checking files...")
+         if (file.exists(paste0("models/", obj_name, ".rds"))) {
+           results <- readRDS(paste0("models/", obj_name, ".rds"))
+         } else {
+           message("No models found in files.")
+           return(invisible(NULL))
+         }
+       }
+  } else if (length(vars) > 0) {
+    rm(a, a1, mesh)
+    gc()
+  }
+  
+  # Construct AIC tables. Pull existing tables and overwrite if necessary.
+  message("Performing sanity check and constructing AIC table...")
+  existing_csv <- paste0("models/", obj_name, "_aic.csv")
+  prior_table <- if (file.exists(existing_csv)) read_csv(existing_csv, show_col_types = FALSE) else NULL
+  check_aic(results, aic_table = prior_table, model_list_name = obj_name)
+  
+  # Save model list object if requested
+  if (save_models == TRUE) {
+    message("Saving models...")
+    assign(obj_name, results, envir = .GlobalEnv)
+    saveRDS(results, paste0("models/", obj_name, ".rds"))
+  }
+  rm(results)
+  invisible(gc())
 }
 
 ############################ 
@@ -502,48 +721,38 @@ dogfish_env <- sdmTMB(log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor
               data = a)
 ############################
 
-# Run environmental iterations
-fsh_env("arrowtooth flounder", 100, obj_name = "arrowtooth_env", dist = "student", vars = c("temp", "salinity", "both", "year_removal", "st_removal", "temp_region"))
-fsh_env("arrowtooth flounder", 100, obj_name = "arrowtooth_env", dist = "student", vars = c("spline_removal"))
-  
-fsh_env("dover sole", cutoff = 74, obj_name = "dover_env", vars = c("temp", "salinity", "both", "year_removal", "st_removal", "temp_region"))
 
-fsh_env("shortspine thornyhead", cutoff = 86, obj_name = "shortspine_env", vars = c("temp", "salinity", "both", "year_removal", "st_removal", "temp_region"))
-
-fsh_env("pacific ocean perch", cutoff = 75, obj_name = "perch_env", vars = c("temp", "salinity", "both", "year_removal", "st_removal", "temp_region", "spline_removal"))
-
+# Creating AIC tables for candidate model comparisons
 check_sanity <- function(species_env) {
   invisible(lapply(names(species_env), function(nm) {
     cat("\n---", nm, "---\n")
     sanity(species_env[[nm]])
   }))
 }
-check_sanity(arrowtooth_env)
-check_sanity(dover_env)
-check_sanity(shortspine_env)
-check_sanity(perch_env)
 
-# Candidate models comparison
+# Arrowtooth -  year removal preferred (based on AIC temp+salinity model). No convergence for just salinity or st_removal, or temp*region interaction, convergence when spline removed for salinity.
+# Centered: Year removal preferred (temp+salinity). No convergence for temp*region.
 
-# Arrowtooth - AIC prefers temp+salinity, although BIC prefers only temperature. Small margin. Year removal preferred (based on AIC temp+salinity model). No convergence for just salinity, convergence when spline removed.
-# Centered: no convergence for salinity or temp+salinity. Year removal preferred.
-AIC(arrowtooth, arrowtooth_env$temp, arrowtooth_env$temp_and_salinity, arrowtooth_env$year_removal, arrowtooth_env$st_removal, arrowtooth_env$splines) |>arrange(AIC)
+fsh_env("arrowtooth flounder", obj_name = "arrowtooth", center = FALSE, dist = "student", vars = c("base_re"))
 
-AIC(arrowtooth, arrowtooth_env$temp, arrowtooth_env$year_removal, arrowtooth_env$st_removal) |>arrange(AIC)
-BIC(arrowtooth, arrowtooth_env$temp, arrowtooth_env$year_removal, arrowtooth_env$st_removal) |>arrange(BIC)
+# Dover - all converge. year removal (temp+salinity) and temp*region preferred.
+# Centered - all converge. year removal (temp+salinity) and temp*region preferred.
+
+fsh_env("dover sole", obj_name = "dover", center = FALSE, vars = c("base_re"))
+fsh_env("dover sole", obj_name = "dover", vars = NULL)
 
 
-# Dover - temp+salinity and year removal (AIC and BIC)
-AIC(dover, dover_env$temp, dover_env$salinity, dover_env$temp_salinity, dover_env$year_removal, dover_env$st_removal, dover_env$temp_svc) |>arrange(AIC)
-BIC(dover, dover_env$temp, dover_env$salinity, dover_env$temp_salinity, dover_env$year_removal, dover_env$st_removal, dover_env$temp_svc) |>arrange(BIC)
+# Shortspine - temp+salinity and year removal (AIC and BIC). temp*region non-convergence. 
+# Centered - temp only
 
-# Shortspine - temp+salinity and year removal (AIC and BIC)
-AIC(shortspine, shortspine_env$temp, shortspine_env$salinity, shortspine_env$temp_and_salinity, shortspine_env$year_removal, shortspine_env$st_removal) |>arrange(AIC)
-BIC(shortspine, shortspine_env$temp, shortspine_env$salinity, shortspine_env$temp_and_salinity, shortspine_env$year_removal, shortspine_env$st_removal) |>arrange(BIC)
+fsh_env("shortspine thornyhead", obj_name = "shortspine", center = FALSE, vars = c("base_re"))
 
-# Perch - only temp (AIC and BIC). No convergence for models with salinity, no convergence for year removal.
-AIC(perch, perch_env$temp, perch_env$st_removal, perch_env$splines) |>arrange(AIC)
-BIC(perch, perch_env$temp, perch_env$st_removal, perch_env$splines) |>arrange(BIC)
+# Perch - temp*region preferred. temp, salinity both below base (because uncentered).
+# Centered - temp*region converged and preferred.
+
+fsh_env("pacific ocean perch", obj_name = "perch", center = FALSE, vars = c("base_re"))
+
+fsh_env("pacific ocean perch", obj_name = "perch", vars = NULL)
 
 ```
 
@@ -576,12 +785,14 @@ ggsave("figures/test_marginal.png",g)
 
 # Time series
 ```{r}
+# to do: time series for each survey for st effect, averg across year for each survey domain
+
 models <- list(
-  arrowtooth = arrowtooth,
-  dover = dover,
-  dogfish = dogfish,
-  perch = perch,
-  shortspine = shortspine)
+  arrowtooth = arrowtooth$base,
+  dover = dover$base,
+  #dogfish = dogfish,
+  perch = perch$base,
+  shortspine = shortspine$base)
 
 time_series <- purrr::map_df(models, function(mod) {
   tidy(mod, effects = "fixed")|>
@@ -625,6 +836,13 @@ for (i in names(preds)) {
 
 # Spatial / temporal ratios
 ```{r}
+models <- list(
+  arrowtooth = arrowtooth,
+  dover = dover,
+  dogfish = dogfish,
+  perch = perch,
+  shortspine = shortspine)
+
 # Spatial / temporal ratios
 ran_pars <- purrr::map_df(models, function(m) {
   tidy(m, effects = "ran_pars")
