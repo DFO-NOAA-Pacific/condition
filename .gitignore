@@ -2,10 +2,10 @@
 .Rhistory
 .RData
 .Ruserdata
-*.png
+#*.png
 data-raw/glorys/*.nc
 data-raw/models/*.rds
 presentation*
-figures*
+#figures*
 data-raw/*.html
 data-raw/*_files
