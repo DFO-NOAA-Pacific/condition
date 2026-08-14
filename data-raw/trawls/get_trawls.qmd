@@ -25,7 +25,7 @@ trawls <- nwfsc |>
   group_by(Trawl_id, time, lon, lat, depth) |>
   summarize(n = n(), .groups = "drop") |> select(-n)
 
-write.csv(trawls, "trawls/trawls_nwfsc.csv")
+write.csv(trawls, "trawls_nwfsc.csv")
 ```
 
 ```{r}
@@ -38,7 +38,7 @@ trawls_pbs <- trawls_pbs |>
   rename(Trawl_id = event_id, lon = lon_start, lat = lat_start, depth = depth_m) |>
   group_by(Trawl_id, time, lon, lat, depth, survey_name) |>
   summarize(n = n()) |> select(-n)
-saveRDS(trawls_pbs, "./trawls/trawls_pbs.rds")
+saveRDS(trawls_pbs, "trawls_pbs.rds")
 ```
 
 ```{r}
@@ -47,13 +47,14 @@ saveRDS(trawls_pbs, "./trawls/trawls_pbs.rds")
 
 download.file("https://raw.githubusercontent.com/DFO-NOAA-Pacific/surveyjoin-data/main/afsc-haul.rds", destfile = "./trawls/trawls_afsc.rds", mode = "wb")
 
-trawls_afsc <- readRDS("./trawls/trawls_afsc.rds")
+trawls_afsc <- readRDS("trawls_afsc.rds")
 
 trawls_afsc <- trawls_afsc |>
   mutate(time = as.Date(date)) |>
   rename(Trawl_id = event_id, lon = lon_start, lat = lat_start, depth = depth_m) |>
   group_by(Trawl_id, time, lon, lat, depth, survey_name) |>
   summarize(n = n()) |> select(-n)
-saveRDS(trawls_afsc, "./trawls/trawls_afsc.rds")
+saveRDS(trawls_afsc, "trawls_afsc.rds")
+
 ```
 

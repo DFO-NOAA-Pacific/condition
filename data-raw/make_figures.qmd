@@ -1,0 +1,322 @@
+---
+title: "Diagnostic plots"
+format: 
+  html:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    code_folding: hide
+editor: source
+---
+# Imports
+```{r include = FALSE}
+library(ggplot2)
+library(rnaturalearth)
+library(PNWColors)
+library(stats)
+library(dplyr)
+library(sf)
+library(sdmTMB)
+library(tidyr)
+library(cowplot)
+library(ggthemes)
+library(patchwork)
+library(forcats)
+
+arrowtooth <- readRDS("models/arrowtooth.rds")
+dogfish <- readRDS("models/dogfish.rds")
+dover <- readRDS("models/dover.rds")
+perch <- readRDS("models/perch.rds")
+shortspine <- readRDS("models/shortspine.rds")
+```
+
+# Figure 1 - data summary
+```{r}
+# Get base maps
+states <- ne_download(scale = 50, type = "states", category = "cultural", returnclass = "sf")
+states <- states |> filter(admin == "United States of America")
+canada <- ne_download(scale = 50, type = "states", category = "cultural", returnclass = "sf")
+canada <- canada |> filter(admin == "Canada") |> select(name, geometry)
+mexico <- ne_countries(scale = "medium", returnclass = "sf", country = "mexico") |> 
+  select(name = admin, geometry)
+alaska <- states |> filter(.data$name == "Alaska")
+
+# Combine, get equal areas crs, crop
+proj <- bind_rows(states, canada, mexico, alaska) |>
+  st_transform(4326) |>
+  st_crop(c(xmin = -170, ymin = 25, xmax = -115, ymax = 65)) |>
+  st_transform(3338)
+rm(states, canada, mexico, alaska)
+gc()
+
+fish_all <- readRDS("fish_all.rds")
+a <- fish_all |> 
+  filter(grepl("arrow", common_name)) |>
+  filter(weight_kg > 0, length_cm > 0, !is.na(lon), !is.na(temp), sex %in% c("M", "F")) |>
+  mutate(region = fct_recode(region, "California Current" = "nwfsc", "Canada" = "pbs", "Alaska" = "afsc"),
+         region = fct_relevel(region, "California Current", "Canada", "Alaska"),
+         survey = fct_recode(survey, "California Current" = "NWFSC.Combo", "Hecate Strait" = "SYN HS", "Queen Charlotte Sound" = "SYN QCS", "West Coast Haida Gwaii" = "SYN WCHG", "West Coast Vancouver Island" = "SYN WCVI")
+  )
+
+a <- a |>
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) |>
+  st_transform(3338) |>
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2]) |>
+  st_drop_geometry()
+
+b <- a |>
+  group_by(year, region) |>
+  summarize(n = n()) |>
+  ggplot(aes(x = year, y = n)) +
+  geom_col() +
+  facet_wrap(~region) + 
+  scale_color_brewer(palette = "Dark2") +
+  theme_minimal() +
+  labs(title = "Number of subsampled observations by region", x = "")
+
+c <- a |> ggplot(aes(x = year, fill = sex)) +
+  geom_histogram(position = "fill", bins = 21) +
+  scale_fill_manual(values = c("#2DD4BF", "#FDE68A")) +
+  facet_wrap(~region) +
+  theme_minimal() +
+  labs(title = "Sex composition by region", x = "")
+
+d <- a |> ggplot() +
+  geom_point(aes(x = x, y = y, color = survey), size = 0.5) +
+  scale_color_brewer(palette = "Dark2") +
+  geom_sf(data = proj) +
+  theme_minimal() +
+  geom_sf_text(data = proj, aes(label = name), size = 2, check_overlap = F) +
+  labs(title = "Study area and trawl locations", x = "", y = "", color = "survey")
+
+#e <- ggdraw() + draw_image("../figures/arrowtooth_flounder.png")
+
+top_plot <- ggdraw() +
+  draw_plot(d) +
+  draw_image("../figures/arrowtooth_flounder.png", x = 0.1, y = 0.1, width = 0.3, height = 0.3)
+
+z <- top_plot / (b+c + plot_layout(ncol = 2)) + plot_layout(heights = c(5, 2))
+ggsave("../figures/fig1.png", z, height = 12, width = 12)
+rm(a, proj, b, c, d, e, top_plot, z, fish_all)
+gc()
+```
+
+# Figure 2 - base model maps
+```{r}
+# Get base maps
+states <- ne_download(scale = 50, type = "states", category = "cultural", returnclass = "sf")
+states <- states |> filter(admin == "United States of America")
+canada <- ne_download(scale = 50, type = "states", category = "cultural", returnclass = "sf")
+canada <- canada |> filter(admin == "Canada") |> select(name, geometry)
+mexico <- ne_countries(scale = "medium", returnclass = "sf", country = "mexico") |> 
+  select(name = admin, geometry)
+alaska <- states |> filter(.data$name == "Alaska")
+
+# Combine, get equal areas crs, crop
+proj <- bind_rows(states, canada, mexico, alaska) |>
+  st_transform(4326) |>
+  st_crop(c(xmin = -170, ymin = 25, xmax = -115, ymax = 65)) |>
+  st_transform(3338)
+rm(states, canada, mexico, alaska)
+
+predictr <- function(model, sex = c("F", "M")) {
+  # Get grids from surveyjoin and combine, removing species-specific data-sparse areas
+  grid <- bind_rows(surveyjoin::nwfsc_grid, surveyjoin::dfo_synoptic_grid, surveyjoin::afsc_grid) |>
+    filter(!survey %in% c("Northern Bering Sea Crab/Groundfish Survey - Eastern Bering Sea Shelf Survey Extension", "Eastern Bering Sea Slope Bottom Trawl Survey", "Triennial"))
+  grid <- add_utm_columns(grid, ll_names = c("lon", "lat"), utm_crs = 3338)
+  
+  if (unique(model$data$common_name) == "pacific spiny dogfish") {
+    grid <- grid |> filter(!grepl("Bering", survey), !grepl("Aleutian",survey), !grepl("Gulf",survey), survey!="SYN WCHG")}
+  
+  if (unique(model$data$common_name) == "dover sole") {
+    grid <- grid |> filter(!grepl("Aleutian", survey))}
+  
+  if (unique(model$data$common_name) %in% c("dover sole","shortspine thornyhead","pacific ocean perch", "pacific spiny dogfish")) {
+    grid <- grid |> filter(!grepl("Eastern Bering Sea Crab", survey))}
+  
+  if (unique(model$data$common_name) %in% c("pacific ocean perch")) {
+    grid <- grid |> filter(lat >= 40)}
+  
+  if (unique(model$data$common_name) == "arrowtooth flounder") {
+    grid <- grid |> filter(lat >= 34)
+  }
+  
+  # Add time, length, sex. Has to be after the filters!!
+  grid <- expand_grid(grid, year = unique(model$data$year)) |>
+    mutate(length_cm = mean(model$data$length_cm, na.rm = T)) |>
+    mutate(log_lengthc = mean(model$data$log_lengthc, na.rm=T)) |>
+    #mutate(sex = "F") |>
+    mutate(region = case_when(
+      survey == "NWFSC.Combo" ~ "nwfsc",
+      survey %in% c("SYN QCS", "SYN HS", "SYN WCVI", "SYN WCHG") ~ "pbs",
+      .default = "afsc"))
+  
+  if (sex == "F") {
+    grid <- grid |> mutate(sex = "F")
+  } else if (sex == "M") {grid <- grid |> mutate(sex = "M")}
+  
+  pred <- predict(model, grid)
+  pred <- pred |>
+    mutate(species = unique(model$data$common_name)) |>
+    st_as_sf(coords = c("lon", "lat"), crs = 4326) |>
+    st_transform(3338) |>
+    mutate(x = st_coordinates(geometry)[,1],
+           y = st_coordinates(geometry)[,2]) |>
+    st_drop_geometry()
+  rm(grid)
+  gc()
+  return(pred)
+}
+mapper <- function(species, preds, fill) {
+  
+  if (fill == "zeta_s" & !any(grepl("zeta_s_log_",names(preds)))) {
+    fill <- "zeta_s_log(length_cm)"
+  } else if (fill == "zeta_s" & any(grepl("zeta_s_log_",names(preds)))) {
+    fill <- "zeta_s_log_lengthc"
+  }
+  
+  r <- max(abs(preds[[fill]]))
+  
+  g <- ggplot() +
+    stat_summary_hex(data = preds, aes(x = x, y = y, z = .data[[fill]]), bins = 50) +
+    scale_fill_gradientn(name = fill,
+                         colours = rev(pnw_palette("Shuksan2")),
+                         limits = c(-r,r)
+                         ) +
+    geom_sf(data = proj) +
+    geom_sf_text(data = proj, aes(label = name), size = 2, check_overlap = F) +
+    theme_minimal() +
+    labs(x = "", y = "", title = species, color = "log(length)")
+return(g)
+}
+
+arrowtooth_pred <- predictr(arrowtooth$base_centered, "F")
+dover_pred <- predictr(dover$base_centered, "F")
+dogfish_pred <- predictr(dogfish$base_centered, "F")
+perch_pred <- predictr(perch$base_centered, "F")
+shortspine_pred <- predictr(shortspine$base_centered,"F")
+
+j <- mapper("Arrowtooth flounder", arrowtooth_pred, "omega_s") +
+  mapper("Arrowtooth flounder", arrowtooth_pred, "zeta_s") + 
+  mapper("Dover sole", dover_pred, "omega_s") +
+  mapper("Dover sole", dover_pred, "zeta_s") + 
+  mapper("Shortspine thornyhead",shortspine_pred, "omega_s") +
+  mapper("Shortspine thornyhead",shortspine_pred, "zeta_s") +
+  mapper("Pacific spiny dogfish", dogfish_pred, "omega_s") +
+  mapper("Pacific spiny dogfish", dogfish_pred, "zeta_s") + 
+  mapper("Pacific ocean perch", perch_pred, "omega_s") +
+  mapper("Pacific ocean perch", perch_pred, "zeta_s") + 
+  patchwork::plot_annotation(title = "", theme = theme(plot.title = element_text(size = 28)))+
+  plot_layout(ncol=2)
+
+arrowtooth_pred <- predictr(arrowtooth$base_centered, "M")
+dover_pred <- predictr(dover$base_centered, "M")
+dogfish_pred <- predictr(dogfish$base_centered, "M")
+perch_pred <- predictr(perch$base_centered, "M")
+shortspine_pred <- predictr(shortspine$base_centered,"M")
+
+k <- mapper("Arrowtooth flounder", arrowtooth_pred, "omega_s") +
+  mapper("Arrowtooth flounder", arrowtooth_pred, "zeta_s") + 
+  mapper("Dover sole", dover_pred, "omega_s") +
+  mapper("Dover sole", dover_pred, "zeta_s") + 
+  mapper("Shortspine thornyhead",shortspine_pred, "omega_s") +
+  mapper("Shortspine thornyhead",shortspine_pred, "zeta_s") +
+  mapper("Pacific spiny dogfish", dogfish_pred, "omega_s") +
+  mapper("Pacific spiny dogfish", dogfish_pred, "zeta_s") + 
+  mapper("Pacific ocean perch", perch_pred, "omega_s") +
+  mapper("Pacific ocean perch", perch_pred, "zeta_s") + 
+  patchwork::plot_annotation(title = "", theme = theme(plot.title = element_text(size = 28)))+
+  plot_layout(ncol=2)
+
+ggsave("../figures/fig2_map_f.png", j, width = 12, height = 18)
+ggsave("../figures/fig2_map_m.png", k, width = 12, height = 18)
+rm(j, k, arrowtooth_pred, dover_pred, dogfish_pred, perch_pred, shortspine_pred, predictr, mapper, proj)
+gc()
+```
+
+# Figure 3 - marginal temperature effects
+```{r}
+# pull marginal effects of smoothing. Use sdmtmb plotting functions and use gratia library for visualizing univariate smooths, might not work with SVC but try. Other method: create prediction grid for 1 year -- with spatial effects=0, sex = female, length = avg length, single region(startwith WC), salinity = mean(salinity), temp = (make 100 vals), single X/Y coord (choose one where spatial field/omega_s ~0)
+# Separate by region - WC first
+# DF will have 100 rows. Pass into predict(..., se_fit = TRUE)
+
+mod <- arrowtooth$year_removal
+grid <- expand_grid(year = 2023, sex = "F", region = "nwfsc",
+         length_cm = mean(mod$data$length_cm, na.rm=T),
+         salinityc = mean(mod$data$salinityc, na.rm=T),
+         X = 2470, #mean(mod$data$X,na.rm=T),
+         Y = -453, #mean(mod$data$Y,na.rm=T),
+         tempc = seq(from = min(mod$data$tempc), to = max(mod$data$tempc), by = 0.1))
+
+pred <- predict(mod, grid, se_fit = TRUE)
+pred <- pred|>mutate(temp = tempc + mean(mod$data$temp))
+
+g <- ggplot(data = pred, aes(x = temp,y = est)) +
+  geom_ribbon(aes(ymin = est-est_se, ymax = est+est_se), alpha=0.3) +
+  geom_line() +
+  theme_minimal()+
+  labs(x = "Temperature (c)", title = "Arrowtooth temperature marginal effects -somewhere off WC")
+
+ggsave("figures/test_marginal.png",g)
+```
+
+
+# Figure 4 - biomass indices
+```{r}
+
+```
+
+
+# Supplements - base model diagnostics (qqplots, residual maps)
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+specs <- list("Arrowtooth flounder" = arrowtooth$base_centered, 
+              "Dover sole"=dover$base_centered, 
+              "Shortspine thornyhead"=shortspine$base_centered,
+              "Pacific spiny dogfish" =dogfish$base_centered,
+              "Pacific ocean perch"=perch$base_centered)
+
+# QQ plots and residual maps
+for (i in names(specs)) {
+
+  rq_res <- residuals(specs[[i]], type = "mle-mvn")
+
+  df <- data.frame(resid = rq_res)
+  g <- ggplot(df, aes(sample = resid)) +
+    stat_qq() +
+    stat_qq_line() +
+    labs(title = paste0(i, " Q-Q Plot"),
+         x = "Theoretical Quantiles",
+         y = "Sample Quantiles") +
+    theme_minimal()
+  ggsave(paste0("../figures/qq_", gsub(" ", "_", tolower(i)), ".png"), g)
+  
+  df <- specs[[i]]$data
+  df$resid <- rq_res
+  df <- df |>
+    st_as_sf(coords = c("lon", "lat"), crs = 4326) |>
+    st_transform(3338) |>
+    mutate(x = st_coordinates(geometry)[,1],
+           y = st_coordinates(geometry)[,2]) |>
+    st_drop_geometry()
+
+  r <- max(abs(df$resid))
+  g <- ggplot() +
+    stat_summary_hex(data = df, aes(x = x, y = y, z = resid), bins = 50) +
+    scale_fill_gradientn(name = "residual",
+                         colours = rev(pnw_palette("Shuksan2")),
+                         limits = c(-r,r)) +
+    geom_sf(data = proj) +
+    facet_wrap(~year) +
+    theme_minimal() +
+    labs(x = "", y = "", title = paste0(i, " residuals"), color = "log(length)")
+  
+  ggsave(paste0("../figures/residuals_", gsub(" ", "_", tolower(i)), ".png"), g, width = 16, height = 8) 
+} 
+rm(specs, df, r, g, i)
+```
+
+
