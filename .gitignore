@@ -9,3 +9,4 @@ data-raw/models/*c.csv
 presentation*
 data-raw/*.html
 data-raw/*_files
+data-generated
