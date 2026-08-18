@@ -1,12 +1,12 @@
 model,aic,converged,sanity_ok,note,formula,timestamp
 base_re,-204609.27376157,TRUE,TRUE,NA,log(weight_kg) ~ log_length * as.factor(region) + as.factor(year) + as.factor(sex) + (1 | trawl_id),NA
-base_centered,-197739.99782971037,TRUE,TRUE,,log(weight_kg) ~ log_lengthc * as.factor(region) + as.factor(year) + as.factor(sex),2026-08-10 12:33:05
+base_centered,-197739.99782971037,TRUE,TRUE,NA,log(weight_kg) ~ log_lengthc * as.factor(region) + as.factor(year) + as.factor(sex),2026-08-10T12:33:05Z
 temp_svc,-197716.268199814,TRUE,TRUE,NA,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + tempc,NA
-year_removal,-197541.533377134,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
+year_removal,-197541.53337713442,TRUE,TRUE,,"log(weight_kg) ~ log_length + as.factor(region) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4) + log_length:as.factor(region)",NA
 temp_salinity,-197539.370157096,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
 temp,-197527.657647339,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4)",NA
 spline_removal,-197403.413640185,TRUE,TRUE,NA,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + salinityc,NA
-base,-197391.832384991,TRUE,TRUE,NA,log(weight_kg) ~ log_length * as.factor(region) + as.factor(year) + as.factor(sex),NA
+base,-197391.83238499096,TRUE,TRUE,,log(weight_kg) ~ log_length * as.factor(region) + as.factor(year) + as.factor(sex),NA
 temp_region,NA,NA,NA,not a valid model object,NA,NA
 temp_region2,NA,NA,FALSE,gradients_ok; all_ok,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(sex) + s(tempc, k = 4, by = region)",NA
 salinity,NA,NA,FALSE,se_magnitude_ok; all_ok,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(salinityc, k = 4)",NA

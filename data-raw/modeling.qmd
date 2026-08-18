@@ -24,12 +24,14 @@ library(broom)
 library(tidyr)
 library(sf)
 library(patchwork)
-library(gganimate)
 library(PNWColors)
 library(RhpcBLASctl)
 RhpcBLASctl::blas_set_num_threads(1)
 RhpcBLASctl::omp_set_num_threads(1)
 options(scipen = 999)
+
+RhpcBLASctl::blas_get_num_procs()
+RhpcBLASctl::omp_get_max_threads()
 ```
 
 # Data cleaning
@@ -243,12 +245,6 @@ gc()
 ```
 
 ```{r}
-fsh_env("arrowtooth flounder", "arrowtooth", vars = c("base_centered"), dist = "student", save_models = TRUE)
-fsh_env("dover sole", "dover", vars = c("base_centered"), save_models = TRUE)
-fsh_env("shortspine thornyhead", "shortspine", vars = c("base_centered"), dist = "student", save_models = TRUE)
-fsh_env("pacific ocean perch", "perch", vars = c("base_centered"), save_models = TRUE)
-
-
 predictr <- function(model) {
   # Get grids from surveyjoin and combine, removing species-specific data-sparse areas
   grid <- bind_rows(surveyjoin::nwfsc_grid, surveyjoin::dfo_synoptic_grid, surveyjoin::afsc_grid) |>
@@ -357,13 +353,29 @@ check_aic <- function(model_list, aic_table = NULL, model_list_name = NULL) {
       message(sprintf("Skipping '%s': not a valid sdmTMB object", nm))
       return(data.frame(model = nm, aic = NA_real_, converged = NA,
                         sanity_ok = NA, note = "not a valid model object",
-                        formula = NA,
-                        timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+                        formula = NA))
     }
 
-    sanity_res <- suppressMessages(suppressWarnings(sanity(mod, silent = TRUE)))
-    sanity_ok <- isTRUE(sanity_res$all_ok)
-
+    
+    sanity_res <- suppressWarnings(suppressMessages(sanity(mod, silent = TRUE)))
+      
+    #small_sigma <- any(grepl("smaller than 0.01", sanity_messages))
+    #sanity_ok <- isTRUE(sanity_res$all_ok)
+    
+    sigma_Z_val <- tryCatch(
+    tidy(mod, effects = "ran_pars") |> filter(term == "sigma_Z") |> pull(estimate),
+    error = function(e) NA_real_)
+    small_sigma <- length(sigma_Z_val) > 0 && !is.na(sigma_Z_val) && sigma_Z_val < 0.01
+      
+    sanity_ok <- (isTRUE(sanity_res$hessian_ok)) &&
+      (isTRUE(sanity_res$eigen_values_ok)) &&
+      (isTRUE(sanity_res$nlminb_ok)) &&
+      (isTRUE(sanity_res$range_ok)) &&
+      (isTRUE(sanity_res$gradients_ok)) &&
+      (isTRUE(sanity_res$se_magnitude_ok)) &&
+      (isTRUE(sanity_res$se_na_ok)) &&
+      (isTRUE(sanity_res$sigmas_ok) || small_sigma)
+    
     if (!sanity_ok) {
       failed_checks <- names(sanity_res)[vapply(sanity_res, isFALSE, logical(1))]
       message(sprintf("Skipping '%s': failed sanity checks: %s",
@@ -371,8 +383,7 @@ check_aic <- function(model_list, aic_table = NULL, model_list_name = NULL) {
       return(data.frame(model = nm, aic = NA_real_, converged = NA,
                          sanity_ok = FALSE,
                          note = paste(failed_checks, collapse = "; "),
-                        formula = as.character(mod$formula),
-                        timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+                        formula = as.character(mod$formula)))
     }
 
     aic_val <- tryCatch(
@@ -380,11 +391,10 @@ check_aic <- function(model_list, aic_table = NULL, model_list_name = NULL) {
       error = function(e) NA_real_,
       warning = function(w) NA_real_
     )
-
+    failed_checks <- names(sanity_res)[vapply(sanity_res, isFALSE, logical(1))]
     data.frame(model = nm, aic = aic_val, converged = TRUE,
-               sanity_ok = TRUE, note = ifelse(is.na(aic_val), "AIC() failed", ""),
-               formula = as.character(mod$formula),
-               timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+               sanity_ok = TRUE, note = paste(paste(failed_checks, collapse=", "), "Small sigma: ", small_sigma),
+               formula = as.character(mod$formula))
   })
 
   # Attach all results rows in order of descending AIC
@@ -693,8 +703,15 @@ fsh_env <- function(species, obj_name, vars = c(NULL, "base", "base_re", "base_c
   # Save model list object if requested
   if (save_models == TRUE) {
     message("Saving models...")
-    assign(obj_name, results, envir = .GlobalEnv)
-    saveRDS(results, paste0("models/", obj_name, ".rds"))
+    
+    existing_saved <- if (file.exists(paste0("models/", obj_name, ".rds"))) {
+      readRDS(paste0("models/", obj_name, ".rds"))
+    } else {
+      list()
+    }
+    existing_saved[names(results)] <- results
+    assign(obj_name, existing_saved, envir = .GlobalEnv)
+    saveRDS(existing_saved, paste0("models/", obj_name, ".rds"))
   }
   rm(results)
   invisible(gc())
@@ -704,21 +721,30 @@ fsh_env <- function(species, obj_name, vars = c(NULL, "base", "base_re", "base_c
 # Dogfish --> no convergence
 a <- fish_all_clean |> filter(common_name == "pacific spiny dogfish")
 a1 <- lm(log(weight_kg) ~ log(length_cm), data = a)
-  a <- a |>
-    mutate(residuals = residuals(a1)) |>
-    mutate(over_3sd = abs(residuals - mean(residuals)) > 3*sd(residuals))
+a <- a |>
+  mutate(residuals = residuals(a1)) |>
+  mutate(over_3sd = abs(residuals - mean(residuals)) > 3*sd(residuals))
 message("Residuals > 3 SD from mean: ", sum(a$over_3sd))
-a <- a|> filter(over_3sd == FALSE)
+a <- a|> filter(over_3sd == FALSE)|>
+  mutate(tempc = temp - mean(temp),
+        salinityc = salinity - mean(salinity),
+        log_length = log(length_cm),
+        log_lengthc = log_length - mean(log_length))
+
 a <- sdmTMB::add_utm_columns(a, ll_names = c("lon", "lat"), utm_crs = 3338)
 mesh <- sdmTMB::make_mesh(a, xy_cols = c("X","Y"), cutoff = 35)
-dogfish_env <- sdmTMB(log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc,k=4),
+dogfish <- list()
+dogfish$base_centered <- sdmTMB(log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(year) + as.factor(sex),
               mesh = mesh,
               spatial = "on",
-              spatial_varying = ~ log(length_cm),
-              #time = "year",
+              spatial_varying = ~ log_lengthc,
+              time = "year",
               #spatiotemporal = "iid", 
               anisotropy = TRUE,
               data = a)
+rm(a, a1, mesh)
+gc()
+saveRDS(dogfish, "models/dogfish.rds")
 ############################
 
 
@@ -729,6 +755,13 @@ check_sanity <- function(species_env) {
     sanity(species_env[[nm]])
   }))
 }
+
+# Saving models for further analysis and visualization
+fsh_env("arrowtooth flounder", "arrowtooth", vars = c("base_centered", "year_removal"), dist = "student", save_models = TRUE)
+fsh_env("dover sole", "dover", vars = c("base_centered", "year_removal"), save_models = TRUE)
+fsh_env("shortspine thornyhead", "shortspine", vars = c("base_centered", "year_removal"), dist = "student", save_models = TRUE)
+fsh_env("pacific ocean perch", "perch", vars = c("base_centered", "year_removal"), save_models = TRUE)
+
 
 # Arrowtooth -  year removal preferred (based on AIC temp+salinity model). No convergence for just salinity or st_removal, or temp*region interaction, convergence when spline removed for salinity.
 # Centered: Year removal preferred (temp+salinity). No convergence for temp*region.
@@ -755,6 +788,181 @@ fsh_env("pacific ocean perch", obj_name = "perch", center = FALSE, vars = c("bas
 fsh_env("pacific ocean perch", obj_name = "perch", vars = NULL)
 
 ```
+
+
+```{r}
+modeler <- function(species, obj_name, vars = c(NULL, "base", "base_re", "base_centered", "temp", "salinity", "temp_salinity", "year_removal", "st_removal", "temp_region", "temp_region2", "spline_removal", "temp_svc", "diffusion1", "diffusion2"), center = FALSE, dist = c("gaussian", "student"), save_models = FALSE) {
+  
+  if (length(vars) > 0) {
+    # Dynamically update distribution
+    dist <- match.arg(dist)
+    fam <- switch(dist, 
+                  gaussian = gaussian(link = "identity"),
+                  student = student(link = "identity", df = NULL))
+    
+    # Dynamically update cutoff value
+    cutoff <- switch(species,
+                     "arrowtooth flounder" = 100,
+                     "dover sole" = 74,
+                     "pacific spiny dogfish" = 35,
+                     "shortspine thornyhead" = 86,
+                     "pacific ocean perch" = 75)
+    
+    # Center variables (species-specific)
+    a <- fish_all_clean |> 
+      filter(common_name == species) |>
+      mutate(yearc = as.numeric(scale(year, center = T, scale = F)),
+             tempc = temp - mean(temp),
+             salinityc = salinity - mean(salinity),
+             log_length = log(length_cm),
+             log_lengthc = log_length - mean(log_length))
+    
+    # Preprocessing --> removing entries beyond -3/3 SDs from the mean residual
+    a1 <- lm(log(weight_kg) ~ log(length_cm), data = a)
+    a <- a |> mutate(residuals = residuals(a1)) |>
+      mutate(over_3sd = abs(residuals - mean(residuals)) > 3*sd(residuals))
+    message("Residuals > 3 SD from mean: ", sum(a$over_3sd), " (", round(sum(a$over_3sd)/nrow(a),3), "%)")
+    a <- a|> filter(over_3sd == FALSE)
+    
+    # Make mesh
+    a <- sdmTMB::add_utm_columns(a, ll_names = c("lon", "lat"), utm_crs = 3338)
+    mesh <- sdmTMB::make_mesh(a, xy_cols = c("X","Y"), cutoff = cutoff)
+    message("Mesh: ", mesh$mesh$n, ".")
+  }
+  
+  # Create empty results list
+  results <- list()
+  
+  
+  # Get base model 
+  st <- ifelse(obj_name == "dogfish", "off", "rw")
+  fit_base_model <- function(mesh, a, fam) {
+  try(sdmTMB(log(weight_kg) ~ log_length*as.factor(region) + as.factor(year) + as.factor(sex),
+    mesh = mesh, spatial = "on", spatial_varying = ~ log_length,
+    time = "year", spatiotemporal = st, anisotropy = TRUE,
+    data = a, family = fam
+  ))
+  }
+  
+  base_path <- paste0("models/", obj_name, ".rds")
+  if ("base" %in% vars) {
+    message("Fitting base model...")
+    base <- fit_base_model(mesh, a, fam)
+  } else {
+      if (file.exists(base_path)) {
+      message("Loading cached base model...")
+      existing_models <- readRDS(base_path)
+      if (!is.null(existing_models$base)) {
+        base <- existing_models$base
+      } else {
+        message("No 'base' entry found in cached file. Fitting base model...")
+        base <- fit_base_model(mesh, a, fam)
+      }
+  } else {
+    message("No cache found. Fitting base model...")
+    fit_base_model(mesh,a, fam)
+    } 
+  }
+  
+  # Set up all model iterations
+  model_iterations <- list(
+    base = quote(base),
+    base_centered = quote(update(base, formula = log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(year) + as.factor(sex), spatial_varying = ~ log_lengthc)),
+    base_re = quote(update(base, formula. = . ~ . + (1|trawl_id))),
+    temp = quote(update(base, formula. = . ~ . + s(tempc, k=4))),
+    salinity = quote(update(base, formula. = . ~ . + s(salinityc, k=4))),
+    temp_salinity = quote(update(base, formula. = . ~ . + s(tempc, k=4) + s(salinityc, k=4))),
+    year_removal = if (obj_name != "perch") {
+      quote(update(base, formula. = . ~ . - as.factor(year) + s(tempc, k=4) + s(salinityc, k=4))) 
+    } else {
+      quote(update(base, formula. = . ~ . - as.factor(year) + s(tempc, k=4)))
+    },
+    st_removal = if (obj_name != "perch") {
+      quote(update(base, formula. = . ~ . + s(tempc, k=4) + s(salinityc, k=4), spatiotemporal = "off")) 
+    } else {
+      quote(update(base, formula. = . ~ . + s(tempc, k=4), spatiotemporal = "off"))
+    },
+    temp_region = quote(update(base, formula. = . ~ . + s(tempc, k=4, by = region))),
+    temp_region2 = quote(update(base, formula. = . ~ . - as.factor(year) + s(tempc, k=4, by = region))),
+    spline_removal = quote(update(base, formula. = . ~ . + salinityc)),
+    temp_svc = quote(update(base, formula. = . ~ . + tempc, spatial_varying = ~ log_length + tempc)),
+    diffusion1 = quote(update(base, nonlocal_formula = ~ diffusion(tempc))), # need to update nonlocal_data
+    diffusion2 = quote(update(base, nonlocal_formula = ~ time_lag(tempc))), # need to update nonlocal_data
+    dogfish0 = quote(update(base, formula = log(weight_kg) ~ log_lengthc*as.factor(region) + as.factor(year) + as.factor(sex), spatial_varying = ~ log_lengthc, spatiotemporal = "iid")), # base centered + turning st on
+    dogfish1 = quote(update(base, spatiotemporal = "iid")), # base turning st on
+    dogfish2 = quote(update(base, formula. = . ~ . - as.factor(year) + s(tempc, k=4))), # year removal just on temp
+    dogfish3 = quote(update(base, formula. = . ~ . - as.factor(year) + s(tempc, k=4), spatiotemporal = "iid")), # above but turn st on
+    dogfish4 = quote(update(base, formula. = . ~ . - as.factor(year) + tempc)), # year removal just on temp - no smooth
+    dogfish42 = quote(update(base, formula. = . ~ . + tempc)),
+    dogfish5 = quote(update(base, formula. = . ~ . - as.factor(year) + tempc, spatiotemporal = "iid")), # year removal on temp - no smooth, st on
+    dogfish6 = quote(update(base, formula. = . ~ . - as.factor(year) + tempc, spatiotemporal = "rw")) # year removal on temp - no smooth, st rw
+  )
+  
+  # Running model(s)
+  for (model in names(model_iterations)) {
+    if (!(model %in% vars)) next
+    message("Modeling ", species, " ", model, "...")
+    results[[model]] <- try(eval(model_iterations[[model]]))
+  }
+  
+  # Getting the model object from env/files if no models are requested - only generate AIC table from existing list
+  # if (length(vars) == 0 || length(results) == 0) {
+  #   message("No models called. Pulling existing models instead from environment...")
+  #   if (exists(obj_name, envir = .GlobalEnv, inherits = FALSE)) {
+  #        results <- get(obj_name, envir = .GlobalEnv)
+  #      } else {
+  #        message("No existing models found in environment. Checking files...")
+  #        if (file.exists(paste0("models/", obj_name, ".rds"))) {
+  #          results <- readRDS(paste0("models/", obj_name, ".rds"))
+  #        } else {
+  #          message("No models found in files.")
+  #          return(invisible(NULL))
+  #        }
+  #      }
+  # } else if (length(vars) > 0) {
+  #   rm(a, a1, mesh)
+  #   gc()
+  # }
+  
+  # Construct AIC tables. Pull existing tables and overwrite if necessary.
+  message("Performing sanity check and constructing AIC table...")
+  existing_csv <- paste0("models/", obj_name, "_aic.csv")
+  prior_table <- if (file.exists(existing_csv)) read_csv(existing_csv, show_col_types = FALSE) else NULL
+  check_aic(results, aic_table = prior_table, model_list_name = obj_name)
+  
+  # Save model list object if requested
+  if (save_models == TRUE) {
+    message("Saving models...")
+    existing_saved <- if (file.exists(paste0("models/", obj_name, ".rds"))) {
+      readRDS(paste0("models/", obj_name, ".rds"))
+    } else {
+      list()
+    }
+    existing_saved[names(results)] <- results
+    assign(obj_name, existing_saved, envir = .GlobalEnv)
+    saveRDS(existing_saved, paste0("models/", obj_name, ".rds"))
+  }
+  rm(results)
+  invisible(gc())
+}
+
+# Run base models
+modeler("arrowtooth flounder", "arrowtooth", vars = c("base", "base_centered", "year_removal"), dist = "student", save_models = TRUE)
+modeler("pacific ocean perch", "perch", vars = c("base", "base_centered", "dogfish4"), save_models = TRUE)
+# need to run again with student t dist:
+modeler("shortspine thornyhead", "shortspine", vars = c("base", "base_centered", "year_removal"), dist = "student", save_models = TRUE)
+modeler("dover sole", "dover", vars = c("base", "base_centered", "year_removal"), save_models = TRUE)
+
+# reminder: the base dogfish model has spatiotemporal = "off"
+modeler("pacific spiny dogfish", "dogfish", vars = c("base", "base_centered", "dogfish4"), save_models = TRUE)
+
+# Other
+modeler("pacific ocean perch", "perch", vars = c("dogfish4"), save_models = TRUE)
+modeler("pacific spiny dogfish", "dogfish", vars = c("dogfish4"), save_models = TRUE)
+
+
+```
+
 
 # Temperature marginal effects
 ```{r}
@@ -783,7 +991,7 @@ ggsave("figures/test_marginal.png",g)
 
 ```
 
-# Time series
+# Time series - not use since have indices
 ```{r}
 # to do: time series for each survey for st effect, averg across year for each survey domain
 
@@ -808,7 +1016,7 @@ ggplot(time_series, aes(x = year, y = estimate)) +
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 0.5))
 ```
 
-# Spatiotemporal maps
+# Spatiotemporal maps - not use since have other maps
 ```{r}
 
 preds <- list("Arrowtooth flounder" = arrowtooth_pred, 

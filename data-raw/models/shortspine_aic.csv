@@ -1,13 +1,13 @@
 model,aic,converged,sanity_ok,note,formula,timestamp
 base_re,-113097.838795822,TRUE,TRUE,NA,log(weight_kg) ~ log_length * as.factor(region) + as.factor(year) + as.factor(sex) + (1 | trawl_id),NA
-base_centered,-107803.54990428257,TRUE,TRUE,,log(weight_kg) ~ log_lengthc * as.factor(region) + as.factor(year) + as.factor(sex),2026-08-10 12:45:08
-base,-107486.291335273,TRUE,TRUE,NA,log(weight_kg) ~ log_length * as.factor(region) + as.factor(year) + as.factor(sex),NA
+base_centered,-107803.54990428255,TRUE,TRUE,NA,log(weight_kg) ~ log_lengthc * as.factor(region) + as.factor(year) + as.factor(sex),NA
 temp_svc,-107415.956133046,TRUE,TRUE,NA,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + tempc,NA
-year_removal,-107337.090306489,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
+year_removal,-107337.09030648906,TRUE,TRUE, Small sigma:  FALSE,"log(weight_kg) ~ log_length + as.factor(region) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4) + log_length:as.factor(region)",NA
 temp_salinity,-107318.255401621,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
 temp,-107118.007549241,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4)",NA
 salinity,-107087.083256227,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(salinityc, k = 4)",NA
 spline_removal,-106914.054609212,TRUE,TRUE,NA,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + salinityc,NA
+base,-106805.3923547042,TRUE,TRUE,Small sigma:  FALSE,log(weight_kg) ~ log_length * as.factor(region) + as.factor(year) + as.factor(sex),NA
 st_removal,-105936.34162935,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
 temp_region,NA,NA,NA,not a valid model object,NA,NA
 temp_region2,NA,NA,NA,not a valid model object,NA,NA
