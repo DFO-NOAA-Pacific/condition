@@ -26,11 +26,11 @@ library(ggthemes)
 library(patchwork)
 library(forcats)
 
-arrowtooth <- readRDS("models/arrowtooth.rds")
-dogfish <- readRDS("models/dogfish.rds")
-dover <- readRDS("models/dover.rds")
-perch <- readRDS("models/perch.rds")
-shortspine <- readRDS("models/shortspine.rds")
+# arrowtooth <- readRDS("models/arrowtooth.rds")
+# dogfish <- readRDS("models/dogfish.rds")
+# dover <- readRDS("models/dover.rds")
+# perch <- readRDS("models/perch.rds")
+# shortspine <- readRDS("models/shortspine.rds")
 ```
 
 # Figure 1 - data summary
@@ -244,30 +244,108 @@ gc()
 # Separate by region - WC first
 # DF will have 100 rows. Pass into predict(..., se_fit = TRUE)
 
-mod <- arrowtooth$year_removal
-grid <- expand_grid(year = 2023, sex = "F", region = "nwfsc",
-         length_cm = mean(mod$data$length_cm, na.rm=T),
-         salinityc = mean(mod$data$salinityc, na.rm=T),
-         X = 2470, #mean(mod$data$X,na.rm=T),
-         Y = -453, #mean(mod$data$Y,na.rm=T),
-         tempc = seq(from = min(mod$data$tempc), to = max(mod$data$tempc), by = 0.1))
+get_marginal <- function() {
+  species_results <- list()
+  for (species in c("pacific spiny dogfish", "pacific ocean perch", "arrowtooth flounder", "shortspine thornyhead", "dover sole")) { 
+    
+    ahh <- switch(species,
+                  "pacific spiny dogfish" = "dogfish",
+                  "arrowtooth flounder" = "arrowtooth",
+                  "shortspine thornyhead" = "shortspine",
+                  "dover sole" = "dover",
+                  "pacific ocean perch" = "perch")
+    
+    model_list <- readRDS(paste0("models/", ahh, ".rds"))
+    
+    if (species %in% c("pacific ocean perch", "pacific spiny dogfish")) {
+      mod <- model_list$dogfish4
+    } else {
+      mod <- model_list$year_removal
+    }
+    
+    region_results <- list()
+    for (region in unique(mod$data$region)) {
+      message(paste0("Getting ", species, " ", region, "..."))
+      data_subset <- mod$data |> filter(region == region)
+      coordx <- switch(region,
+                       "nwfsc" = 2267308/1000,
+                       "pbs" = 1586466/1000,
+                       "afsc" = 424926.1/1000)
+      coordy <- switch(region,
+                       "nwfsc" = -21969.5/1000,
+                       "pbs" = 563394.5/1000,
+                       "afsc" = 1056922.7/1000)
+      
+      grid <- expand_grid(year = 2023, 
+                        sex = "F",
+                        region = region,
+                        log_length = mean(data_subset$log_length, na.rm=TRUE),
+                        salinityc = mean(data_subset$salinityc, na.rm=TRUE),
+                        X = coordx,
+                        Y = coordy,
+                        tempc = seq(from = min(data_subset$tempc), to = max(data_subset$tempc), by = 0.1))
+      
+      pred <- predict(mod, grid, se_fit = TRUE)
+      pred <- pred|>mutate(temp = tempc + mean(data_subset$temp))
+      pred$region <- region
+      pred$species <- species
+      region_results[[region]] <- pred
+    }
+    results <- bind_rows(region_results)
+    species_results[[species]] <- results
+    rm(model_list)
+    gc()
+  }
+  final_results <- bind_rows(species_results)
+  g <- ggplot(data = final_results, aes(x = temp, y = est, color = region)) +
+    geom_ribbon(aes(ymin = est-est_se, ymax = est+est_se), alpha=0.3) +
+    geom_line() +
+    facet_wrap(~species) +
+    theme_minimal()+
+    labs(x = "Temperature (c)")
+  ggsave("../figures/fig3_marginal_temp.png", g)
+  return(final_results)
+}
 
-pred <- predict(mod, grid, se_fit = TRUE)
-pred <- pred|>mutate(temp = tempc + mean(mod$data$temp))
+q <- get_marginal()
 
-g <- ggplot(data = pred, aes(x = temp,y = est)) +
-  geom_ribbon(aes(ymin = est-est_se, ymax = est+est_se), alpha=0.3) +
-  geom_line() +
-  theme_minimal()+
-  labs(x = "Temperature (c)", title = "Arrowtooth temperature marginal effects -somewhere off WC")
+mod <- shortspine$year_removal
+z <- mod$data |> filter(region == "nwfsc", common_name == "shortspine thornyhead") |> st_as_sf(coords = c("lon", "lat"), crs =4326) |>
+  st_transform(crs = 3338) 
 
-ggsave("figures/test_marginal.png",g)
+z_coords <- st_coordinates(z)
+z_mean <- data.frame(X = mean(z_coords[, "X"]), Y = mean(z_coords[, "Y"]))
+
+ggplot() +
+  geom_sf(data = proj) +
+  geom_point(data = z, aes(x = X*1000, y = Y*1000)) +
+  geom_point(data = data.frame(X=2267308,Y= -21969.5), aes(x = X, y = Y), color = "red", size = 2)
 ```
 
 
 # Figure 4 - biomass indices
 ```{r}
+indices <- readRDS("indices.rds")
 
+ggplot(data = indices, aes(x = year, y = est, color = species)) +
+  geom_point() +
+  geom_line() +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha=0.3) +
+  theme_minimal()
+
+# fish_all |>
+#   group_by(trawl_id, region) |>
+#   slice(1) |>
+#   ungroup() |>
+#   group_by(year, region) |>z
+#   summarize(avg_temp = mean(temp,na.rm=TRUE)) |>
+#   #mutate(var = avg_temp - mean(avg_temp)) |>
+# ggplot(aes(x = year, y = avg_temp, color = region)) +
+#   geom_point() +
+#   geom_line() +
+#   theme_minimal()
+
+ggsave("../figures/wc_indices_all.png")
 ```
 
 
