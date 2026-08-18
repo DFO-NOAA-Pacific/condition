@@ -21,7 +21,7 @@ library(ggplot2)
 ```
 
 ```{r}
-get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "dogfish"), sex = c("F", "M"), save_wa = FALSE) {
+get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "dogfish"), sex = c("F", "M"), save_wa = TRUE) {
   # Get body condition model
   species <- match.arg(species)
   path <- paste0("models/", species, ".rds") 
@@ -29,10 +29,14 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
 
   # Get biomass predictions --> load into new env and grab object
   file <- list.files("biomass_predictions", pattern = species, full.names = TRUE, ignore.case = TRUE)
-  e <- new.env()
-  load(file, envir = e)
-  obj_name <- ls(e)[1]
-  biomass_predictions <- get(obj_name, envir = e)
+  if (species == "shortspine") {
+    biomass_predictions <- readRDS(file)
+  } else {
+    e <- new.env()
+    load(file, envir = e)
+    obj_name <- ls(e)[1]
+    biomass_predictions <- get(obj_name, envir = e)
+  }
   
   # Add density and format the biomass predictions
   message("Adding density column to biomass predictions and setting coords...")
@@ -97,19 +101,16 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
   message("Predicting body condition on the new data and getting weighted average...")
   pred <- predict(model, final_grid, return_tmb_object = TRUE)
   pred$data <- pred$data |>
-    mutate(species = unique(model$data$common_name)) #|>
-    # st_as_sf(coords = c("lon", "lat"), crs = 4326) |>
-    # st_transform(3338) |>
-    # mutate(x = st_coordinates(geometry)[,1],
-    #        y = st_coordinates(geometry)[,2])
+    mutate(species = unique(model$data$common_name)) 
   
   # Get weighted average using predictions and density vector
   wa <- get_weighted_average(pred, vector = pred$data$density)
-  g <- ggplot(data = wa, aes(x = year, y = est)) +
-    geom_line() +
-    geom_ribbon(aes(ymin = lwr, ymax = upr), alpha=0.3) +
-    theme_minimal()
-  ggsave(paste0("../figures/wc_indices_", species, ".png"), g, width = 8, height = 6)
+  wa$species <- species
+  # g <- ggplot(data = wa, aes(x = year, y = est)) +
+  #   geom_line() +
+  #   geom_ribbon(aes(ymin = lwr, ymax = upr), alpha=0.3) +
+  #   theme_minimal()
+  # ggsave(paste0("../figures/wc_indices_", species, ".png"), g, width = 8, height = 6)
   rm(e)
   if (save_wa) {
     invisible(gc())
@@ -119,24 +120,27 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
 }
 
 
-a <- get_wa("arrowtooth", "F", save_wa = TRUE) 
-a$species <- "arrowtooth"
-b <- get_wa("dover", "F", save_wa = TRUE)
-b$species <- "dover"
-c <- get_wa("perch", "F", save_wa = TRUE)
-c$species <- "perch"
-d <- get_wa("dogfish", "F", save_wa = TRUE)
-d$species <- "dogfish"
-e <- bind_rows(a,b,c,d)
-saveRDS(e, "indices.rds")
+a <- get_wa("arrowtooth", "F") 
+b <- get_wa("dover", "F")
+c <- get_wa("perch", "F")
+d <- get_wa("dogfish", "F")
+e <- get_wa("shortspine", "F")
+f <- bind_rows(a,b,c,d,e)
+saveRDS(f, "indices.rds")
 
-ggplot(data = e, aes(x = year, y = est, color = species)) +
+
+# Ideas for visuals
+ggplot(data = f, aes(x = year, y = est, color = species)) +
+  geom_point() +
   geom_line() +
-  #facet_wrap(~species)+ 
   geom_ribbon(aes(ymin = lwr, ymax = upr), alpha=0.3) +
   theme_minimal()
 
-#get_wa("shortspine", "F")
+ggplot(data = f, aes(x = year, y = est, color = species)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lwr, ymax = upr), width = 0.3) +
+  theme_minimal()
+
 
 ```
 

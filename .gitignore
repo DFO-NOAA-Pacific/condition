@@ -1,11 +1,11 @@
 .Rproj.user
 .Rhistory
 .RData
+.RDataTmp
 .Ruserdata
-#*.png
 data-raw/glorys/*.nc
 data-raw/models/*.rds
+data-raw/models/*c.csv
 presentation*
-#figures*
 data-raw/*.html
 data-raw/*_files
