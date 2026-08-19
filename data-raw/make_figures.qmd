@@ -368,7 +368,7 @@ g <- ggplot(data = indices, aes(x = year, y = est, color = species)) +
   facet_wrap(~region) +
   geom_ribbon(aes(ymin = lwr, ymax = upr), alpha=0.3) +
   theme_minimal() +
-  labs(x = "Year", y = "Biomass-weighted predicted average log(weight)")
+  labs(x = "Year", y = "Predicted average log(weight)")
 
 # fish_all |>
 #   group_by(trawl_id, region) |>
@@ -382,7 +382,7 @@ g <- ggplot(data = indices, aes(x = year, y = est, color = species)) +
 #   geom_line() +
 #   theme_minimal()
 
-ggsave("../figures/fig5_indices.png", g)
+ggsave("../figures/fig5_indices.png", g, width = 8, height = 6)
 
 # investigating dogfish
 s <- fish_all_clean|>filter(grepl("dogfish",common_name), year == 2019, region == "nwfsc")

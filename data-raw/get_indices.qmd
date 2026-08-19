@@ -25,18 +25,18 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
   species <- match.arg(species)
   region <- match.arg(region)
   
+  #browser()
   # Get body condition model
   path <- paste0("models/", species, ".rds") 
   model <- readRDS(path)$base_centered
 
   # Get biomass predictions --> load into new env and grab object
-  #file <- list.files("biomass_predictions", pattern = species, full.names = TRUE, ignore.case = TRUE)
   files <- list.files("biomass_predictions")
   file <- files[grepl(region, files) & grepl(species, files)]
   
   if (region == "nwfsc" & species != "shortspine") {
     e <- new.env()
-    load(file, envir = e)
+    load(paste0("biomass_predictions/", file), envir = e)
     obj_name <- ls(e)[1]
     biomass_predictions <- get(obj_name, envir = e)
   } else {
@@ -90,10 +90,7 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
   grid <- expand_grid(grid, year = unique(model$data$year)) |>
     mutate(length_cm = mean(model$data$length_cm, na.rm = T)) |>
     mutate(log_lengthc = mean(model$data$log_lengthc, na.rm=T)) |>
-    mutate(region = case_when(
-      survey == "NWFSC.Combo" ~ "nwfsc",
-      survey %in% c("SYN QCS", "SYN HS", "SYN WCVI", "SYN WCHG") ~ "pbs",
-      .default = "afsc"))
+    mutate(region = region)
   if (sex == "F") {
     grid <- grid |> mutate(sex = "F")
   } else if (sex == "M") {grid <- grid |> mutate(sex = "M")}
@@ -133,13 +130,12 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
   invisible(gc())
   return(wa)
 }
-
-
-a <- get_wa("arrowtooth", "F") 
-b <- get_wa("dover", "F")
-c <- get_wa("perch", "F")
-d <- get_wa("dogfish", "F")
-e <- get_wa("shortspine", "F")
+getwd()
+a <- get_wa("arrowtooth", "F", "nwfsc") 
+b <- get_wa("dover", "F", "nwfsc")
+c <- get_wa("perch", "F", "nwfsc")
+d <- get_wa("dogfish", "F", "nwfsc")
+e <- get_wa("shortspine", "F", "nwfsc")
 
 f <- get_wa("arrowtooth", "F", "pbs")
 g <- get_wa("dover", "F", "pbs")
@@ -148,9 +144,10 @@ i <- get_wa("dogfish", "F", "pbs")
 j <- get_wa("shortspine", "F", "pbs")
 
 k <- bind_rows(f,g,h,i,j, indices)
-saveRDS(k, "indices.rds")
+saveRDS(z, "indices.rds")
+
 # Ideas for visuals
-ggplot(data = k, aes(x = year, y = est, color = species)) +
+ggplot(data = indices, aes(x = year, y = est, color = species)) +
   geom_point() +
   geom_line() +
   facet_wrap(~region) +
@@ -162,6 +159,11 @@ ggplot(data = f, aes(x = year, y = est, color = species)) +
   geom_errorbar(aes(ymin = lwr, ymax = upr), width = 0.3) +
   theme_minimal()
 
+# investigating large biomass predictions in bc
+p|>group_by(year) |>summarize(mean = mean(biomass_density), min = min(biomass_density), max = max(biomass_density))
 
+`pbs-density-arrowtooth-flounder` |> group_by(year) |>summarize(mean = mean(biomass_density), min = min(biomass_density), max = max(biomass_density))
+
+predictions |> mutate(density = plogis(est1)*exp(est2))|>group_by(year) |>summarize(mean = mean(density), min = min(density), max = max(density))
 ```
 
