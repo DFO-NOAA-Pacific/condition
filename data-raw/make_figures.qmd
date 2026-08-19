@@ -26,11 +26,11 @@ library(ggthemes)
 library(patchwork)
 library(forcats)
 
-# arrowtooth <- readRDS("models/arrowtooth.rds")
-# dogfish <- readRDS("models/dogfish.rds")
-# dover <- readRDS("models/dover.rds")
-# perch <- readRDS("models/perch.rds")
-# shortspine <- readRDS("models/shortspine.rds")
+arrowtooth <- readRDS("models/arrowtooth.rds")
+dogfish <- readRDS("models/dogfish.rds")
+dover <- readRDS("models/dover.rds")
+perch <- readRDS("models/perch.rds")
+shortspine <- readRDS("models/shortspine.rds")
 ```
 
 # Figure 1 - data summary
@@ -124,6 +124,7 @@ proj <- bind_rows(states, canada, mexico, alaska) |>
 rm(states, canada, mexico, alaska)
 
 predictr <- function(model, sex = c("F", "M")) {
+  sex <- match.arg(sex)
   # Get grids from surveyjoin and combine, removing species-specific data-sparse areas
   grid <- bind_rows(surveyjoin::nwfsc_grid, surveyjoin::dfo_synoptic_grid, surveyjoin::afsc_grid) |>
     filter(!survey %in% c("Northern Bering Sea Crab/Groundfish Survey - Eastern Bering Sea Shelf Survey Extension", "Eastern Bering Sea Slope Bottom Trawl Survey", "Triennial"))
@@ -147,18 +148,14 @@ predictr <- function(model, sex = c("F", "M")) {
   
   # Add time, length, sex. Has to be after the filters!!
   grid <- expand_grid(grid, year = unique(model$data$year)) |>
-    mutate(length_cm = mean(model$data$length_cm, na.rm = T)) |>
-    mutate(log_lengthc = mean(model$data$log_lengthc, na.rm=T)) |>
-    #mutate(sex = "F") |>
-    mutate(region = case_when(
-      survey == "NWFSC.Combo" ~ "nwfsc",
-      survey %in% c("SYN QCS", "SYN HS", "SYN WCVI", "SYN WCHG") ~ "pbs",
-      .default = "afsc"))
-  
-  if (sex == "F") {
-    grid <- grid |> mutate(sex = "F")
-  } else if (sex == "M") {grid <- grid |> mutate(sex = "M")}
-  
+    mutate(length_cm = mean(model$data$length_cm, na.rm = T),
+           log_lengthc = mean(model$data$log_lengthc, na.rm=T),
+           sex = sex,
+           region = case_when(
+            survey == "NWFSC.Combo" ~ "nwfsc",
+            survey %in% c("SYN QCS", "SYN HS", "SYN WCVI", "SYN WCHG") ~ "pbs",
+            .default = "afsc"))
+
   pred <- predict(model, grid)
   pred <- pred |>
     mutate(species = unique(model$data$common_name)) |>
@@ -238,6 +235,42 @@ rm(j, k, arrowtooth_pred, dover_pred, dogfish_pred, perch_pred, shortspine_pred,
 gc()
 ```
 
+# Figure 3 - spatial/spatiotemporal ratios
+
+```{r}
+models <- list(
+  arrowtooth = arrowtooth$base_centered,
+  dover = dover$base_centered,
+  dogfish = dogfish$base_centered,
+  perch = perch$base_centered,
+  shortspine = shortspine$base_centered)
+
+# Spatial / temporal ratios
+ran_pars <- purrr::map_df(models, function(m) {
+  tidy(m, effects = "ran_pars")
+}, .id = "species")
+
+g <- ran_pars |>
+  filter(term %in% c("sigma_O", "sigma_E")) |>
+  select(species, term, estimate, conf.low, conf.high) |>
+  filter(!species %in% c("dogfish")) |>
+  pivot_wider(names_from = term, values_from = c(estimate,conf.low, conf.high)) |>
+  #mutate(ratio_E_O = sigma_E / sigma_O,  # spatiotemporal relative to spatial
+  #       ratio_O_E = sigma_O / sigma_E)  |> # spatial relative to spatiotemporal
+  ggplot(aes(x = estimate_sigma_O, y = estimate_sigma_E, color = species)) +
+  geom_point(size = 3) +
+  geom_abline(intercept = 0, slope = 1) +
+  #geom_vline(xintercept = 0.03426156) +
+  geom_errorbar(aes(ymin = conf.low_sigma_E, ymax = conf.high_sigma_E), width = 0.005) +
+  geom_errorbar(aes(xmin = conf.low_sigma_O, xmax = conf.high_sigma_O), orientation = "y", width = 0.001) +
+  scale_color_brewer(palette = "Dark2") +
+  theme_minimal() +
+  #xlim(c(0,0.15)) +
+  #ylim(c(0, 0.075)) +
+  labs(x = "Spatial variability", y = "Spatiotemporal variability")
+ggsave("../figures/fig3_ratios.png", g, height = 5)
+```
+
 # Figure 3 - marginal temperature effects
 ```{r}
 # pull marginal effects of smoothing. Use sdmtmb plotting functions and use gratia library for visualizing univariate smooths, might not work with SVC but try. Other method: create prediction grid for 1 year -- with spatial effects=0, sex = female, length = avg length, single region(startwith WC), salinity = mean(salinity), temp = (make 100 vals), single X/Y coord (choose one where spatial field/omega_s ~0)
@@ -303,19 +336,20 @@ get_marginal <- function() {
     facet_wrap(~species) +
     theme_minimal()+
     labs(x = "Temperature (c)")
-  ggsave("../figures/fig3_marginal_temp.png", g)
+  ggsave("../figures/fig4_marginal_temp.png", g)
   return(final_results)
 }
 
 q <- get_marginal()
+library(ggeffects)
+ggpredict(arrowtooth$year_removal, terms = "tempc")
 
+# Getting fixed coordinates
 mod <- shortspine$year_removal
 z <- mod$data |> filter(region == "nwfsc", common_name == "shortspine thornyhead") |> st_as_sf(coords = c("lon", "lat"), crs =4326) |>
   st_transform(crs = 3338) 
-
 z_coords <- st_coordinates(z)
 z_mean <- data.frame(X = mean(z_coords[, "X"]), Y = mean(z_coords[, "Y"]))
-
 ggplot() +
   geom_sf(data = proj) +
   geom_point(data = z, aes(x = X*1000, y = Y*1000)) +
@@ -325,13 +359,16 @@ ggplot() +
 
 # Figure 4 - biomass indices
 ```{r}
+# Eventually once we have indices for all regions, plot color=region and facet by species?
 indices <- readRDS("indices.rds")
 
-ggplot(data = indices, aes(x = year, y = est, color = species)) +
+g <- ggplot(data = indices, aes(x = year, y = est, color = species)) +
   geom_point() +
   geom_line() +
+  facet_wrap(~region) +
   geom_ribbon(aes(ymin = lwr, ymax = upr), alpha=0.3) +
-  theme_minimal()
+  theme_minimal() +
+  labs(x = "Year", y = "Biomass-weighted predicted average log(weight)")
 
 # fish_all |>
 #   group_by(trawl_id, region) |>
@@ -345,7 +382,16 @@ ggplot(data = indices, aes(x = year, y = est, color = species)) +
 #   geom_line() +
 #   theme_minimal()
 
-ggsave("../figures/wc_indices_all.png")
+ggsave("../figures/fig5_indices.png", g)
+
+# investigating dogfish
+s <- fish_all_clean|>filter(grepl("dogfish",common_name), year == 2019, region == "nwfsc")
+fit <- lm(log(weight_kg) ~ log(length_cm), data =s)
+ss <- st_as_sf(coords = c("lon", "lat"), crs = 4326) |>st_transform(3338)|>
+     mutate(x = st_coordinates(geometry)[,1],
+            y = st_coordinates(geometry)[,2]) |>
+     st_drop_geometry()
+ggplot()+geom_sf(data =proj) + geom_point(data = ss, aes(x = x, y = y))
 ```
 
 
