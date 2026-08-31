@@ -817,6 +817,14 @@ modeler <- function(species, obj_name, vars = c(NULL, "base", "base_re", "base_c
              log_length = log(length_cm),
              log_lengthc = log_length - mean(log_length))
     
+    a <- a |>
+      group_by(lat, lon) |>
+      mutate(temp_spatial_anom = tempc - mean(tempc, na.rm = TRUE)) |>
+      ungroup() |>
+      group_by(year) |>
+      mutate(temp_year_anom = tempc - mean(tempc, na.rm = TRUE)) |>
+      ungroup()
+    
     # Preprocessing --> removing entries beyond -3/3 SDs from the mean residual
     a1 <- lm(log(weight_kg) ~ log(length_cm), data = a)
     a <- a |> mutate(residuals = residuals(a1)) |>
@@ -843,7 +851,7 @@ modeler <- function(species, obj_name, vars = c(NULL, "base", "base_re", "base_c
     data = a, family = fam
   ))
   }
-  
+  #browser()
   base_path <- paste0("models/", obj_name, ".rds")
   if ("base" %in% vars) {
     message("Fitting base model...")
@@ -895,7 +903,10 @@ modeler <- function(species, obj_name, vars = c(NULL, "base", "base_re", "base_c
     dogfish4 = quote(update(base, formula. = . ~ . - as.factor(year) + tempc)), # year removal just on temp - no smooth
     dogfish42 = quote(update(base, formula. = . ~ . + tempc)),
     dogfish5 = quote(update(base, formula. = . ~ . - as.factor(year) + tempc, spatiotemporal = "iid")), # year removal on temp - no smooth, st on
-    dogfish6 = quote(update(base, formula. = . ~ . - as.factor(year) + tempc, spatiotemporal = "rw")) # year removal on temp - no smooth, st rw
+    dogfish6 = quote(update(base, formula. = . ~ . - as.factor(year) + tempc, spatiotemporal = "rw")), # year removal on temp - no smooth, st rw
+    anom = quote(update(base, formula. = . ~ . - as.factor(year) + s(temp_spatial_anom, k=4) + s(temp_year_anom, k=4))),
+    no_region = quote(update(base, formula = log(weight_kg) ~ log_length + as.factor(sex) + s(tempc,k=4) + s(salinityc, k=4))),
+    no_region2 = quote(update(base, formula = log(weight_kg) ~ log_length + as.factor(sex) + tempc))
   )
   
   # Running model(s)
@@ -957,8 +968,11 @@ modeler("dover sole", "dover", vars = c("base", "base_centered", "year_removal")
 modeler("pacific spiny dogfish", "dogfish", vars = c("base", "base_centered", "dogfish4"), save_models = TRUE)
 
 # Other
-modeler("pacific ocean perch", "perch", vars = c("dogfish4"), save_models = TRUE)
-modeler("pacific spiny dogfish", "dogfish", vars = c("dogfish4"), save_models = TRUE)
+modeler("arrowtooth flounder", "arrowtooth", vars = c("no_region"), dist = "student", save_models = TRUE)
+modeler("shortspine thornyhead", "shortspine", vars = c("no_region"), dist = "student", save_models = TRUE)
+modeler("dover sole", "dover", vars = c("no_region"), save_models = TRUE)
+modeler("pacific ocean perch", "perch", vars = c("no_region2"), save_models = TRUE)
+modeler("pacific spiny dogfish", "dogfish", vars = c("no_region2"), save_models = TRUE)
 
 
 ```
@@ -1045,11 +1059,11 @@ for (i in names(preds)) {
 # Spatial / temporal ratios
 ```{r}
 models <- list(
-  arrowtooth = arrowtooth,
-  dover = dover,
-  dogfish = dogfish,
-  perch = perch,
-  shortspine = shortspine)
+  arrowtooth = arrowtooth$base_centered,
+  dover = dover$base_centered,
+  dogfish = dogfish$base_centered,
+  perch = perch$base_centered,
+  shortspine = shortspine$base_centered)
 
 # Spatial / temporal ratios
 ran_pars <- purrr::map_df(models, function(m) {
@@ -1058,10 +1072,22 @@ ran_pars <- purrr::map_df(models, function(m) {
 
 ran_pars |>
   filter(term %in% c("sigma_O", "sigma_E")) |>
-  select(species, term, estimate) |>
-  pivot_wider(names_from = term, values_from = estimate) |>
-  mutate(ratio_E_O = sigma_E / sigma_O,  # spatiotemporal relative to spatial
-         ratio_O_E = sigma_O / sigma_E)   # spatial relative to spatiotemporal
+  select(species, term, estimate, conf.low, conf.high) |>
+  filter(!species %in% c("dogfish")) |>
+  pivot_wider(names_from = term, values_from = c(estimate,conf.low, conf.high)) |>
+  #mutate(ratio_E_O = sigma_E / sigma_O,  # spatiotemporal relative to spatial
+  #       ratio_O_E = sigma_O / sigma_E)  |> # spatial relative to spatiotemporal
+  ggplot(aes(x = estimate_sigma_O, y = estimate_sigma_E, color = species)) +
+  geom_point(size = 3) +
+  geom_abline(intercept = 0, slope = 1) +
+  #geom_vline(xintercept = 0.03426156) +
+  geom_errorbar(aes(ymin = conf.low_sigma_E, ymax = conf.high_sigma_E), width = 0.005) +
+  geom_errorbar(aes(xmin = conf.low_sigma_O, xmax = conf.high_sigma_O), orientation = "y", width = 0.001) +
+  scale_color_brewer(palette = "Dark2") +
+  theme_minimal() +
+  #xlim(c(0,0.15)) +
+  #ylim(c(0, 0.075)) +
+  labs(x = "Spatial variability", y = "Spatiotemporal variability")
 ```
 
 # Animations
