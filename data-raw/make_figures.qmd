@@ -368,7 +368,7 @@ g <- ggplot(data = indices, aes(x = year, y = est, color = species)) +
   facet_wrap(~region) +
   geom_ribbon(aes(ymin = lwr, ymax = upr), alpha=0.3) +
   theme_minimal() +
-  labs(x = "Year", y = "Predicted average log(weight)")
+  labs(x = "", y = "Predicted average log(weight)")
 
 # fish_all |>
 #   group_by(trawl_id, region) |>
@@ -384,14 +384,6 @@ g <- ggplot(data = indices, aes(x = year, y = est, color = species)) +
 
 ggsave("../figures/fig5_indices.png", g, width = 8, height = 6)
 
-# investigating dogfish
-s <- fish_all_clean|>filter(grepl("dogfish",common_name), year == 2019, region == "nwfsc")
-fit <- lm(log(weight_kg) ~ log(length_cm), data =s)
-ss <- st_as_sf(coords = c("lon", "lat"), crs = 4326) |>st_transform(3338)|>
-     mutate(x = st_coordinates(geometry)[,1],
-            y = st_coordinates(geometry)[,2]) |>
-     st_drop_geometry()
-ggplot()+geom_sf(data =proj) + geom_point(data = ss, aes(x = x, y = y))
 ```
 
 

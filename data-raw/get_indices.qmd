@@ -21,7 +21,7 @@ library(ggplot2)
 ```
 
 ```{r}
-get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "dogfish"), sex = c("F", "M"), region = c("nwfsc", "pbs", "afsc")) {
+get_wa_old <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "dogfish"), sex = c("F", "M"), region = c("nwfsc", "pbs", "afsc")) {
   species <- match.arg(species)
   region <- match.arg(region)
   
@@ -120,9 +120,13 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
   pred <- predict(model, final_grid, return_tmb_object = TRUE)
   pred$data <- pred$data |>
     mutate(species = unique(model$data$common_name)) 
-  
+  #print(summary(pred$data$est))
+browser()
   # Get weighted average using predictions and density vector
-  wa <- get_weighted_average(pred, vector = pred$data$density)
+  #wa <- get_weighted_average(pred, vector = pred$data$density)
+  wa <- pred$data |>
+    group_by(year) |>
+    summarize(est_weighted = weighted.mean(est, w = density))
   wa$species <- species
   wa$region <- region
   
@@ -130,7 +134,131 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
   invisible(gc())
   return(wa)
 }
-getwd()
+
+get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "dogfish"), sex = c("F", "M"), region = c("nwfsc", "pbs", "afsc")) {
+  species <- match.arg(species)
+  region <- match.arg(region)
+  
+  # Get body condition model
+  path <- paste0("models/", species, ".rds") 
+  model <- readRDS(path)$base_centered
+
+  # Get biomass predictions --> load into new env and grab object
+  files <- list.files("biomass_predictions")
+  file <- files[grepl(region, files) & grepl(species, files)]
+  
+  if (region == "nwfsc" & species != "shortspine") {
+    e <- new.env()
+    load(paste0("biomass_predictions/", file), envir = e)
+    obj_name <- ls(e)[1]
+    biomass_predictions <- get(obj_name, envir = e)
+  } else {
+    biomass_predictions <- readRDS(paste0("biomass_predictions/", file))
+  }
+
+  # Add density and format the biomass predictions
+  message("Adding density column to biomass predictions and setting coords...")
+  
+  if (region == "nwfsc") {
+    biomass_predictions <- biomass_predictions |>
+      mutate(density = plogis(est1) * exp(est2)) |>
+      mutate(X = X*1000, Y = Y*1000) |> # converting km to m because crs32610 expects meters
+      st_as_sf(coords = c("X", "Y"), crs = 32610) |>
+      st_transform(3338) |>
+      mutate(x = st_coordinates(geometry)[,1],
+             y = st_coordinates(geometry)[,2]) |>
+      select(x,y,density, year)
+  }
+  
+  if (region == "pbs") {
+    biomass_predictions <- biomass_predictions |>
+      st_as_sf(coords = c("lon", "lat"), crs = 4326) |>
+      st_transform(3338) |>
+      mutate(x = st_coordinates(geometry)[,1],
+             y = st_coordinates(geometry)[,2]) |>
+      rename(density = biomass_density)
+  }
+  
+  # Get grid from surveyjoin removing species-specific data-sparse areas
+  message("Getting grid and attempting spatial join...")
+  grid <- switch(region,
+                 "nwfsc" = surveyjoin::nwfsc_grid,
+                 "pbs" = surveyjoin::dfo_synoptic_grid,
+                 "afsc" = surveyjoin::afsc_grid)
+  grid <- grid |>
+    filter(!survey %in% c("Northern Bering Sea Crab/Groundfish Survey - Eastern Bering Sea Shelf Survey Extension", "Eastern Bering Sea Slope Bottom Trawl Survey", "Triennial"))
+  if (unique(model$data$common_name) == "pacific spiny dogfish") {
+    grid <- grid |> filter(!grepl("Bering", survey), !grepl("Aleutian",survey), !grepl("Gulf",survey), survey!="SYN WCHG")}
+  if (unique(model$data$common_name) == "dover sole") {
+    grid <- grid |> filter(!grepl("Aleutian", survey))}
+  if (unique(model$data$common_name) %in% c("dover sole","shortspine thornyhead","pacific ocean perch", "pacific spiny dogfish")) {
+    grid <- grid |> filter(!grepl("Eastern Bering Sea Crab", survey))}
+  if (unique(model$data$common_name) %in% c("pacific ocean perch")) {
+    grid <- grid |> filter(lat >= 40)}
+  if (unique(model$data$common_name) == "arrowtooth flounder") {
+    grid <- grid |> filter(lat >= 34)
+  }
+  
+  # Add time, length, sex. Has to be after the filters!!
+  grid <- expand_grid(grid, year = unique(model$data$year)) |>
+    mutate(length_cm = mean(model$data$length_cm, na.rm = T)) |>
+    mutate(log_lengthc = mean(model$data$log_lengthc, na.rm=T)) |>
+    mutate(region = region)
+  if (sex == "F") {
+    grid <- grid |> mutate(sex = "F")
+  } else if (sex == "M") {grid <- grid |> mutate(sex = "M")}
+  
+  # Turn grid into spatial object for joining
+  grid_sf <- grid |>
+    st_as_sf(coords = c("lon", "lat"), crs = 4326, remove = FALSE) |>
+    st_transform(3338)
+  
+  # Do spatial join to biomass_predictions by year, setting coordinates
+  joined_grid_list <- list()
+  for (yr in unique(grid$year)) {
+    grid_year <- grid_sf |> filter(year == yr)
+    biomass_year <- biomass_predictions |> filter(year == yr) |>select(-year)
+    if (nrow(grid_year)>0 && nrow(biomass_predictions) >0) {
+      joined_year <- grid_year |>
+        st_join(biomass_year, join = st_nearest_feature, maxdist = 500)
+      joined_grid_list[[as.character(yr)]] <- joined_year}}
+  joined_grid <- bind_rows(joined_grid_list)
+  final_grid <- joined_grid |>
+    mutate(X = st_coordinates(geometry)[,1] / 1000, # divide to convert m to km because condition model expects km
+           Y = st_coordinates(geometry)[,2] / 1000) |>
+    as.data.frame()
+  
+  final_grid <- final_grid |>
+    group_by(year) |>
+    mutate(
+      sum_density = sum(density),
+      proportion_density = density / sum_density
+    )
+  #browser()
+  # Predict on grid
+  # pred <- predict(model, final_grid, return_tmb_object = TRUE)
+  # pred$data <- pred$data |>
+  #   mutate(species = unique(model$data$common_name)) 
+  message("Predicting body condition on new data and getting weighted average...")
+  weighted_condition <- get_index(
+    model,
+    newdata = final_grid,
+    area = final_grid$proportion_density
+  )
+  
+  z <- qnorm(0.975)
+  weighted_condition$lwr <- weighted_condition$est - z * weighted_condition$se_natural
+  weighted_condition$upr <- weighted_condition$est + z * weighted_condition$se_natural
+  
+  weighted_condition$species <- species
+  weighted_condition$region <- region
+  
+  rm(e)
+  invisible(gc())
+  return(weighted_condition)
+}
+
+
 a <- get_wa("arrowtooth", "F", "nwfsc") 
 b <- get_wa("dover", "F", "nwfsc")
 c <- get_wa("perch", "F", "nwfsc")
@@ -143,11 +271,11 @@ h <- get_wa("perch", "F", "pbs")
 i <- get_wa("dogfish", "F", "pbs")
 j <- get_wa("shortspine", "F", "pbs")
 
-k <- bind_rows(f,g,h,i,j, indices)
+z <- bind_rows(a,b,c,d,e,f,g,h,i,j)
 saveRDS(z, "indices.rds")
 
 # Ideas for visuals
-ggplot(data = indices, aes(x = year, y = est, color = species)) +
+ggplot(data = z, aes(x = year, y = est, color = species)) +
   geom_point() +
   geom_line() +
   facet_wrap(~region) +
@@ -159,11 +287,5 @@ ggplot(data = f, aes(x = year, y = est, color = species)) +
   geom_errorbar(aes(ymin = lwr, ymax = upr), width = 0.3) +
   theme_minimal()
 
-# investigating large biomass predictions in bc
-p|>group_by(year) |>summarize(mean = mean(biomass_density), min = min(biomass_density), max = max(biomass_density))
-
-`pbs-density-arrowtooth-flounder` |> group_by(year) |>summarize(mean = mean(biomass_density), min = min(biomass_density), max = max(biomass_density))
-
-predictions |> mutate(density = plogis(est1)*exp(est2))|>group_by(year) |>summarize(mean = mean(density), min = min(density), max = max(density))
 ```
 
