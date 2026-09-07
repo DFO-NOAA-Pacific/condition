@@ -110,7 +110,7 @@ top_plot <- ggdraw() +
   draw_image("../figures/arrowtooth_flounder.png", x = 0.1, y = 0.15, width = 0.3, height = 0.3)
 
 z <- top_plot / (b+c + plot_layout(ncol = 2)) + plot_layout(heights = c(5, 2))
-ggsave("../figures/fig1.png", z, height = 10, width = 12)
+ggsave("../figures/fig1.png", z, height = 9, width = 12)
 rm(a, proj, b, c, d, e, top_plot, z, fish_all)
 gc()
 ```
@@ -260,6 +260,9 @@ ran_pars <- purrr::map_df(models, function(m) {
   tidy(m, effects = "ran_pars")
 }, .id = "species")
 
+ran_pars <- ran_pars|> 
+  mutate(species = fct_recode(species, "Arrowtooth flounder" = "arrowtooth", "Pacific Ocean perch" = "perch", "Dover sole" = "dover", "Pacific spiny dogfish" = "dogfish", "Shortspine thornyhead" = "shortspine"))
+
 g <- ran_pars |>
   filter(term %in% c("sigma_O", "sigma_E")) |>
   select(species, term, estimate, conf.low, conf.high) |>
@@ -274,14 +277,14 @@ g <- ran_pars |>
   geom_errorbar(aes(ymin = conf.low_sigma_E, ymax = conf.high_sigma_E), width = 0.005) +
   geom_errorbar(aes(xmin = conf.low_sigma_O, xmax = conf.high_sigma_O), orientation = "y", width = 0.001) +
   scale_color_brewer(palette = "Dark2") +
-  theme_minimal() +
+  theme_bw() +
   #xlim(c(0,0.15)) +
   #ylim(c(0, 0.075)) +
-  labs(x = "Spatial variability", y = "Spatiotemporal variability")
+  labs(x = "Spatial variability", y = "Spatiotemporal variability", color = "Species")
 ggsave("../figures/fig3_ratios.png", g, height = 5)
 ```
 
-# Figure 3 - marginal temperature effects
+# Figure 4 - marginal temperature effects
 ```{r}
 # pull marginal effects of smoothing. Use sdmtmb plotting functions and use gratia library for visualizing univariate smooths, might not work with SVC but try. Other method: create prediction grid for 1 year -- with spatial effects=0, sex = female, length = avg length, single region(startwith WC), salinity = mean(salinity), temp = (make 100 vals), single X/Y coord (choose one where spatial field/omega_s ~0)
 # Separate by region - WC first
@@ -393,12 +396,15 @@ get_marginal <- function() {
 
 q <- get_marginal()
 
+q <- q |>
+  mutate(species = fct_recode(species, "Arrowtooth flounder" = "arrowtooth flounder", "Pacific Ocean perch" = "pacific ocean perch", "Dover sole" = "dover sole", "Pacific spiny dogfish" = "pacific spiny dogfish", "Shortspine thornyhead" = "shortspine thornyhead"))
+
 g <- ggplot(data = q, aes(x = temp, y = est)) +
     geom_ribbon(aes(ymin = est-est_se, ymax = est+est_se), alpha=0.3) +
     geom_line() +
     facet_wrap(~species) +
-    theme_minimal()+
-    labs(x = "Temperature (c)", y = "Predicted log(weight) (kg)")
+    theme_bw()+
+    labs(x = "Temperature (C)", y = "Predicted log(weight) (kg)")
 
 ggsave("../figures/fig4_marginal_temp.png", g, width = 7, height = 6)
 
@@ -421,13 +427,14 @@ ggsave("../figures/fig4_marginal_temp.png", g, width = 7, height = 6)
 ```{r}
 # Eventually once we have indices for all regions, plot color=region and facet by species?
 indices <- readRDS("indices.rds")
-
+indices <- indices |>
+  mutate(region = fct_recode(region, "California Current" = "nwfsc", "Canada" = "pbs")) #"Alaska" = "afsc"))
 g <- ggplot(data = indices, aes(x = year, y = est, color = species)) +
   geom_point() +
   geom_line() +
   facet_wrap(~region) +
   geom_ribbon(aes(ymin = lwr, ymax = upr), alpha=0.3) +
-  theme_minimal() +
+  theme_bw() +
   labs(x = "", y = "Predicted average log(weight)")
 
 ggsave("../figures/fig5_indices.png", g, width = 8, height = 6)
