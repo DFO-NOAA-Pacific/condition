@@ -273,6 +273,16 @@ j <- get_wa("shortspine", "F", "pbs")
 
 z <- bind_rows(a,b,c,d,e,f,g,h,i,j)
 saveRDS(z, "indices.rds")
+indices <- readRDS("indices.rds")
+
+for (i in unique(indices$species)) {
+  subset <- indices |> filter(species == i)
+  fit1 <- lm(est ~ year*region, weights = se, data = subset)
+  fit2 <- lm(est ~ year + region, weights = se, data = subset)
+print(i)
+  print(AIC(fit1, fit2))
+}
+
 
 # Ideas for visuals
 ggplot(data = z, aes(x = year, y = est, color = species)) +
@@ -282,10 +292,7 @@ ggplot(data = z, aes(x = year, y = est, color = species)) +
   geom_ribbon(aes(ymin = lwr, ymax = upr), alpha=0.3) +
   theme_minimal()
 
-ggplot(data = f, aes(x = year, y = est, color = species)) +
-  geom_point() +
-  geom_errorbar(aes(ymin = lwr, ymax = upr), width = 0.3) +
-  theme_minimal()
+
 
 ```
 

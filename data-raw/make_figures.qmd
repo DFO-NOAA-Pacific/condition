@@ -427,16 +427,24 @@ ggsave("../figures/fig4_marginal_temp.png", g, width = 7, height = 6)
 ```{r}
 # Eventually once we have indices for all regions, plot color=region and facet by species?
 indices <- readRDS("indices.rds")
+
 indices <- indices |>
-  mutate(region = fct_recode(region, "California Current" = "nwfsc", "Canada" = "pbs")) #"Alaska" = "afsc"))
-g <- ggplot(data = indices, aes(x = year, y = est, color = species)) +
+  mutate(region = fct_recode(region, "California Current" = "nwfsc", "Canada" = "pbs"),
+         species = fct_recode(species, "Arrowtooth flounder" = "arrowtooth", "Pacific Ocean perch" = "perch", "Dover sole" = "dover", "Pacific spiny dogfish" = "dogfish", "Shortspine thornyhead" = "shortspine")) |>
+  group_by(species) |>
+  mutate(est_scaled = est - mean(est),
+         lwr_scaled  = lwr - mean(est),
+         upr_scaled = upr - mean(est)) |> 
+  ungroup()
+
+g <- ggplot(data = indices, aes(x = year, y = est_scaled, color = species)) +
   geom_point() +
   geom_line() +
   facet_wrap(~region) +
-  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha=0.3) +
+  geom_ribbon(aes(ymin = lwr_scaled, ymax = upr_scaled), alpha=0.3) +
   theme_bw() +
-  labs(x = "", y = "Predicted average log(weight)")
-
+  labs(x = "", y = "Deviation from species \n predicted mean log(weight)", color = "Species") #Predicted average log(weight)
+g
 ggsave("../figures/fig5_indices.png", g, width = 8, height = 6)
 
 ```
@@ -444,15 +452,15 @@ ggsave("../figures/fig5_indices.png", g, width = 8, height = 6)
 
 # Supplements - base model diagnostics (qqplots, residual maps)
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
-specs <- list("Arrowtooth flounder" = arrowtooth$base_centered, 
-              "Dover sole"=dover$base_centered, 
-              "Shortspine thornyhead"=shortspine$base_centered,
-              "Pacific spiny dogfish" =dogfish$base_centered,
-              "Pacific ocean perch"=perch$base_centered)
+specs <- list("Arrowtooth flounder" = arrowtooth$year_removal, 
+              "Dover sole"=dover$year_removal, 
+              "Shortspine thornyhead"=shortspine$year_removal,
+              "Pacific spiny dogfish" =dogfish$dogfish4,
+              "Pacific ocean perch"=perch$dogfish4) # no spline on temp
 
 # QQ plots and residual maps
 for (i in names(specs)) {
-
+  
   rq_res <- residuals(specs[[i]], type = "mle-mvn")
 
   df <- data.frame(resid = rq_res)
@@ -463,6 +471,7 @@ for (i in names(specs)) {
          x = "Theoretical Quantiles",
          y = "Sample Quantiles") +
     theme_minimal()
+  print(g)
   ggsave(paste0("../figures/qq_", gsub(" ", "_", tolower(i)), ".png"), g)
   
   df <- specs[[i]]$data
@@ -484,7 +493,7 @@ for (i in names(specs)) {
     facet_wrap(~year) +
     theme_minimal() +
     labs(x = "", y = "", title = paste0(i, " residuals"), color = "log(length)")
-  
+  print(g)
   ggsave(paste0("../figures/residuals_", gsub(" ", "_", tolower(i)), ".png"), g, width = 16, height = 8) 
 } 
 rm(specs, df, r, g, i)
