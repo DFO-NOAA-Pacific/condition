@@ -3,11 +3,6 @@ title: "all_species"
 format: html
 editor: source
 ---
-Notes:
-- time series for each survey for st effect, averg across year for each survey domain
-- Experiment with diffusion
-- Add trawl id as random effect.
-- Put date/time as column in aic table
 
 # Imports
 ```{r warning = FALSE, message = FALSE}
@@ -885,6 +880,13 @@ modeler <- function(species, obj_name, vars = c(NULL, "base", "base_re", "base_c
     } else {
       quote(update(base, formula. = . ~ . - as.factor(year) + s(tempc, k=4)))
     },
+    year_removal_re = if (obj_name != "perch") {
+      quote(update(base, formula. = . ~ . - as.factor(year) + s(tempc, k=4) + s(salinityc, k=4) + (1|trawl_id))) 
+    } else {
+      quote(update(base, formula. = . ~ . - as.factor(year) + s(tempc, k=4) + (1|trawl_id)))
+    },
+    yr_perch_re = quote(update(base, formula. = . ~ . - as.factor(year) + tempc + (1|trawl_id))),
+    yr_dogfish_re = quote(update(base, formula. = . ~ . + tempc + (1|trawl_id))),
     st_removal = if (obj_name != "perch") {
       quote(update(base, formula. = . ~ . + s(tempc, k=4) + s(salinityc, k=4), spatiotemporal = "off")) 
     } else {
@@ -906,7 +908,8 @@ modeler <- function(species, obj_name, vars = c(NULL, "base", "base_re", "base_c
     dogfish6 = quote(update(base, formula. = . ~ . - as.factor(year) + tempc, spatiotemporal = "rw")), # year removal on temp - no smooth, st rw
     anom = quote(update(base, formula. = . ~ . - as.factor(year) + s(temp_spatial_anom, k=4) + s(temp_year_anom, k=4))),
     no_region = quote(update(base, formula = log(weight_kg) ~ log_length + as.factor(sex) + s(tempc,k=4) + s(salinityc, k=4))),
-    no_region2 = quote(update(base, formula = log(weight_kg) ~ log_length + as.factor(sex) + tempc))
+    no_region2 = quote(update(base, formula = log(weight_kg) ~ log_length + as.factor(sex) + tempc)),
+    temp_region3 = quote(update(base, formula. = . ~ . + tempc*region))
   )
   
   # Running model(s)
@@ -957,10 +960,18 @@ modeler <- function(species, obj_name, vars = c(NULL, "base", "base_re", "base_c
   invisible(gc())
 }
 
+# What we actually need:
+# base - cached base model
+# base_centered - centered values for figure 2 maps
+# year_removal / dogfish4 - compare to the base and see if env vars are useful
+# no_region / no_region2 (perch, dogfish) - removing region confounding for figure 4
+
+# to do:
+# year_removal_re / perch4_re / dogfish42_re - add random effects 
+
 # Run base models
-modeler("arrowtooth flounder", "arrowtooth", vars = c("base", "base_centered", "year_removal"), dist = "student", save_models = TRUE)
-modeler("pacific ocean perch", "perch", vars = c("base", "base_centered", "dogfish4"), save_models = TRUE)
-# need to run again with student t dist:
+modeler("arrowtooth flounder", "arrowtooth", vars = c("base", "base_centered", "year_removal", "no_region", "year_removal_re"), dist = "student", save_models = TRUE)
+modeler("pacific ocean perch", "perch", vars = c("base", "base_centered", "dogfish4", "no_region2"), save_models = TRUE)
 modeler("shortspine thornyhead", "shortspine", vars = c("base", "base_centered", "year_removal"), dist = "student", save_models = TRUE)
 modeler("dover sole", "dover", vars = c("base", "base_centered", "year_removal"), save_models = TRUE)
 
@@ -968,12 +979,11 @@ modeler("dover sole", "dover", vars = c("base", "base_centered", "year_removal")
 modeler("pacific spiny dogfish", "dogfish", vars = c("base", "base_centered", "dogfish4"), save_models = TRUE)
 
 # Other
-modeler("arrowtooth flounder", "arrowtooth", vars = c("no_region"), dist = "student", save_models = TRUE)
-modeler("shortspine thornyhead", "shortspine", vars = c("no_region"), dist = "student", save_models = TRUE)
-modeler("dover sole", "dover", vars = c("no_region"), save_models = TRUE)
-modeler("pacific ocean perch", "perch", vars = c("no_region2"), save_models = TRUE)
-modeler("pacific spiny dogfish", "dogfish", vars = c("no_region2"), save_models = TRUE)
-
+modeler("arrowtooth flounder", "arrowtooth", vars = c("year_removal_re"), dist = "student", save_models = TRUE)
+modeler("shortspine thornyhead", "shortspine", vars = c("year_removal_re"), dist = "student", save_models = TRUE)
+modeler("dover sole", "dover", vars = c("year_removal_re"), save_models = TRUE)
+modeler("pacific ocean perch", "perch", vars = c("yr_perch_re"), save_models = TRUE)
+modeler("pacific spiny dogfish", "dogfish", vars = c("base_re"))
 
 ```
 

@@ -1,7 +1,8 @@
 model,aic,converged,sanity_ok,note,formula,timestamp
+year_removal_re,-114035.98826703215,TRUE,TRUE,Small sigma:  FALSE,"log(weight_kg) ~ log_length + as.factor(region) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4) + (1 | trawl_id) + log_length:as.factor(region)",NA
 base_re,-113097.838795822,TRUE,TRUE,NA,log(weight_kg) ~ log_length * as.factor(region) + as.factor(year) + as.factor(sex) + (1 | trawl_id),NA
 year_removal,-108044.9744063498,TRUE,TRUE,Small sigma:  FALSE,"log(weight_kg) ~ log_length + as.factor(region) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4) + log_length:as.factor(region)",NA
-no_region,-107972.30156622606,TRUE,TRUE, Small sigma:  FALSE,"log(weight_kg) ~ log_length + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
+no_region,-107972.30156622606,TRUE,TRUE,Small sigma:  FALSE,"log(weight_kg) ~ log_length + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
 base_centered,-107803.54990428255,TRUE,TRUE,Small sigma:  FALSE,log(weight_kg) ~ log_lengthc + as.factor(region) + as.factor(year) + as.factor(sex) + log_lengthc:as.factor(region),NA
 base,-107486.29133527265,TRUE,TRUE,Small sigma:  FALSE,log(weight_kg) ~ log_length * as.factor(region) + as.factor(year) + as.factor(sex),NA
 temp_svc,-107415.956133046,TRUE,TRUE,NA,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + tempc,NA
@@ -12,5 +13,3 @@ spline_removal,-106914.054609212,TRUE,TRUE,NA,log(weight_kg) ~ length_var * as.f
 st_removal,-105936.34162935,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
 temp_region,NA,NA,NA,not a valid model object,NA,NA
 temp_region2,NA,NA,NA,not a valid model object,NA,NA
-diffusion1,NA,NA,FALSE,hessian_ok; gradients_ok; se_na_ok; all_ok,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex),NA
-diffusion2,NA,NA,FALSE,hessian_ok; nlminb_ok; gradients_ok; se_na_ok; all_ok,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex),NA

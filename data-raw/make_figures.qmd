@@ -467,7 +467,7 @@ for (i in names(specs)) {
   g <- ggplot(df, aes(sample = resid)) +
     stat_qq() +
     stat_qq_line() +
-    labs(title = paste0(i, " Q-Q Plot"),
+    labs(title = "", #paste0(i, " Q-Q Plot"),
          x = "Theoretical Quantiles",
          y = "Sample Quantiles") +
     theme_minimal()
@@ -492,7 +492,7 @@ for (i in names(specs)) {
     geom_sf(data = proj) +
     facet_wrap(~year) +
     theme_minimal() +
-    labs(x = "", y = "", title = paste0(i, " residuals"), color = "log(length)")
+    labs(x = "", y = "", color = "log(length)")
   print(g)
   ggsave(paste0("../figures/residuals_", gsub(" ", "_", tolower(i)), ".png"), g, width = 16, height = 8) 
 } 

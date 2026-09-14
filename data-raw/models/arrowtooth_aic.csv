@@ -5,13 +5,12 @@ temp_svc,-197716.268199814,TRUE,TRUE,NA,log(weight_kg) ~ length_var * as.factor(
 year_removal,-197541.5333771344,TRUE,TRUE,Small sigma:  FALSE,"log(weight_kg) ~ log_length + as.factor(region) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4) + log_length:as.factor(region)",NA
 temp_salinity,-197539.370157096,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
 temp,-197527.657647339,TRUE,TRUE,NA,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4)",NA
-no_region,-197477.6868631727,TRUE,TRUE, Small sigma:  FALSE,"log(weight_kg) ~ log_length + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
+no_region,-197477.6868631727,TRUE,TRUE,Small sigma:  FALSE,"log(weight_kg) ~ log_length + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
 spline_removal,-197403.413640185,TRUE,TRUE,NA,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + salinityc,NA
 base,-197391.83238499096,TRUE,TRUE,Small sigma:  FALSE,log(weight_kg) ~ log_length * as.factor(region) + as.factor(year) + as.factor(sex),NA
 temp_region,NA,NA,NA,not a valid model object,NA,NA
 temp_region2,NA,NA,FALSE,gradients_ok; all_ok,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(sex) + s(tempc, k = 4, by = region)",NA
 salinity,NA,NA,FALSE,se_magnitude_ok; all_ok,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(salinityc, k = 4)",NA
 st_removal,NA,NA,FALSE,hessian_ok; gradients_ok; se_na_ok; all_ok,"log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4)",NA
-diffusion1,NA,NA,FALSE,hessian_ok; gradients_ok; se_na_ok; all_ok,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex),NA
-diffusion2,NA,NA,FALSE,hessian_ok; nlminb_ok; gradients_ok; se_na_ok; all_ok,log(weight_kg) ~ length_var * as.factor(region) + as.factor(year) + as.factor(sex),NA
-anom,NA,NA,NA,not a valid model object,NA,NA
+temp_region3,NA,NA,FALSE,hessian_ok; gradients_ok; se_na_ok; all_ok,log(weight_kg) ~ log_length + as.factor(region) + as.factor(year) + as.factor(sex) + tempc + region + log_length:as.factor(region) + tempc:region,NA
+year_removal_re,NA,NA,FALSE,hessian_ok; all_ok,"log(weight_kg) ~ log_length + as.factor(region) + as.factor(sex) + s(tempc, k = 4) + s(salinityc, k = 4) + (1 | trawl_id) + log_length:as.factor(region)",NA
