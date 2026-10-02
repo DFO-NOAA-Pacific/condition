@@ -78,6 +78,7 @@ for (spp in species) {
     time = "year",
     time_varying = ~ 1,
     time_varying_type = "rw",
+    extra_time = 2020L,
     priors = sdmTMBpriors(sigma_V = gamma_cv(0.3, 0.5)),
     spatiotemporal = "rw",
     spatial = "on",
