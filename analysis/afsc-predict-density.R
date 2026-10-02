@@ -27,22 +27,22 @@ for (spp in species) {
     mutate(year = lubridate::year(lubridate::ymd(date))) |> 
     select(survey_name, year, lon_start, lat_start, depth_m, effort, catch_weight, common_name)
   dat <- add_utm_columns(dat, c("lon_start", "lat_start"), utm_crs = ak_crs) |> 
-    filter(!is.na(catch_weight), !is.na(effort))
+    filter(!is.na(catch_weight), !is.na(effort), year %in% 2003:2023)
   table(dat$survey_name, dat$year)
 
     # species-specific data extent:
     if (spp == "arrowtooth flounder") {
-      dat <- filter(dat, survey_name %in% c("Eastern Bering Sea Crab/Groundfish Bottom Trawl Survey", 
-                                            "Gulf of Alaska Bottom Trawl Survey",                                                    
-                                            "Aleutian Islands Bottom Trawl Survey"))
+      dat <- filter(dat, survey_name %in% c("eastern Bering Sea", 
+                                            "Gulf of Alaska",                                                    
+                                            "Aleutian Islands"))
     } else if (spp == "dover sole") {
-      dat <- filter(dat, survey_name == "Gulf of Alaska Bottom Trawl Survey")
+      dat <- filter(dat, survey_name == "Gulf of Alaska")
     } else if (spp == "shortspine thornyhead") {
-      dat <- filter(dat, survey_name %in% c("Gulf of Alaska Bottom Trawl Survey",                                                    
-                                            "Aleutian Islands Bottom Trawl Survey"))
+      dat <- filter(dat, survey_name %in% c("Gulf of Alaska",                                                    
+                                            "Aleutian Islands"))
     } else if (spp == "pacific ocean perch") {
-      dat <- filter(dat, survey_name %in% c("Gulf of Alaska Bottom Trawl Survey",                                                    
-                                            "Aleutian Islands Bottom Trawl Survey"))
+      dat <- filter(dat, survey_name %in% c("Gulf of Alaska",                                                    
+                                            "Aleutian Islands"))
     }
   
   # species-specific prediction grid:
@@ -62,11 +62,13 @@ for (spp in species) {
                                           "Aleutian Islands Bottom Trawl Survey"))
   }
   
-  grid <- sdmTMB::replicate_df("year", unique(dat$year))
-  grid <- add_utm_columns(grid, c("lon", "lat"), utm_crs = utm_bc)
+  grid <- sdmTMB::replicate_df(grid, "year", unique(dat$year))
+  grid <- add_utm_columns(grid, c("lon", "lat"), utm_crs = ak_crs)
 
-  # now fit:
-  mesh <- make_mesh(dat, c("X", "Y"), cutoff = 15)
+  # now fit (Q: do we need extent-specific cutoffs by species?):
+  mesh <- make_mesh(dat, c("X", "Y"), cutoff = 50) # 190-390 knots across species
+  mesh$mesh$n
+  
   fit <- sdmTMB(
     catch_weight ~ 0,
     data = dat,
