@@ -44,6 +44,7 @@ for (spp in species) {
       dat <- filter(dat, survey_name %in% c("Gulf of Alaska",                                                    
                                             "Aleutian Islands"))
     }
+    table(dat$survey_name, dat$year)
   
   # species-specific prediction grid:
   grid <- surveyjoin::afsc_grid
@@ -78,7 +79,7 @@ for (spp in species) {
     time = "year",
     time_varying = ~ 1,
     time_varying_type = "rw",
-    extra_time = 2020L,
+    extra_time = 2020L, # for GOA-only dover sole: c(2004, 2006, 2008, 2010, 2012, 2014, 2016, 2018, 2020, 2022)
     priors = sdmTMBpriors(sigma_V = gamma_cv(0.3, 0.5)),
     spatiotemporal = "rw",
     spatial = "on",
