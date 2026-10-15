@@ -429,13 +429,15 @@ ggsave("../figures/fig4_marginal_temp.png", g, width = 7, height = 6)
 indices <- readRDS("indices.rds")
 
 indices <- indices |>
-  mutate(region = fct_recode(region, "California Current" = "nwfsc", "Canada" = "pbs"),
+  mutate(region = fct_recode(region, "California Current" = "nwfsc", "Canada" = "pbs", "Alaska" = "afsc"),
          species = fct_recode(species, "Arrowtooth flounder" = "arrowtooth", "Pacific Ocean perch" = "perch", "Dover sole" = "dover", "Pacific spiny dogfish" = "dogfish", "Shortspine thornyhead" = "shortspine")) |>
   group_by(species) |>
-  mutate(est_scaled = est - mean(est),
-         lwr_scaled  = lwr - mean(est),
-         upr_scaled = upr - mean(est)) |> 
+  mutate(est_exp = exp(est),
+    est_scaled = est_exp - mean(est_exp),
+         lwr_scaled  = exp(lwr) - mean(est_exp),
+         upr_scaled = exp(upr) - mean(est_exp)) |> 
   ungroup()
+indices$region <- factor(indices$region, levels = c("Alaska", "Canada", "California Current"))
 
 g <- ggplot(data = indices, aes(x = year, y = est_scaled, color = species)) +
   geom_point() +
@@ -443,9 +445,10 @@ g <- ggplot(data = indices, aes(x = year, y = est_scaled, color = species)) +
   facet_wrap(~region) +
   geom_ribbon(aes(ymin = lwr_scaled, ymax = upr_scaled), alpha=0.3) +
   theme_bw() +
-  labs(x = "", y = "Deviation from species \n predicted mean log(weight)", color = "Species") #Predicted average log(weight)
+  labs(x = "", y = "Deviation from species \n predicted mean weight (kg)", color = "Species") #Predicted average log(weight)
+
 g
-ggsave("../figures/fig5_indices.png", g, width = 8, height = 6)
+ggsave("../figures/fig5_indices.png", g, width = 12, height = 6)
 
 ```
 

@@ -15,22 +15,31 @@ library(ggplot2)
 ```
 
 ```{r}
+# Following function allows calculating biomass weighted body condition for each species and region. It joins the biomass predictions into the grid that is used for prediction. 
+# Note: NWFSC prediction files are large and not stored on Github, rather on a local folder. 
+
 get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "dogfish"), sex = c("F", "M"), region = c("nwfsc", "pbs", "afsc")) {
   species <- match.arg(species)
   region <- match.arg(region)
   
-  # Get biomass predictions 
-  #files <- list.files("biomass_predictions")
-  files <- list.files("../data-generated")
+  # Get biomass predictions. NWFSC preds are large and not on github, read in from a different folder
+  # Get file name
+  if (region == "nwfsc") {
+    files <- list.files("biomass_predictions")
+  } else {
+    files <- list.files("../data-generated")
+  }
   file <- files[grepl(region, files) & grepl(species, files)]
-  
-  if (region == "nwfsc" & species != "shortspine") {
+  # Read in predictions
+  if (region %in% c("afsc", "pbs")) { # live in data-generated folder
+    biomass_predictions <- readRDS(paste0("../data-generated/", file))
+  } else if (region == "nwfsc" & species == "shortspine") { # nwfsc live locally, shortspine the only .rds file
+    biomass_predictions <- readRDS(paste0("biomass_predictions/", file))
+  } else { # reading in .rdata files for the other nwfsc species
     e <- new.env()
     load(paste0("biomass_predictions/", file), envir = e)
     obj_name <- ls(e)[1]
     biomass_predictions <- get(obj_name, envir = e)
-  } else {
-    biomass_predictions <- readRDS(paste0("../data-generated/", file))
   }
 
   # Add density and format the biomass predictions
@@ -46,7 +55,6 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
              y = st_coordinates(geometry)[,2]) |>
       select(x,y,density, year)
   }
-  
   if (region %in% c("pbs", "afsc")) {
     biomass_predictions <- biomass_predictions |>
       st_as_sf(coords = c("lon", "lat"), crs = 4326) |>
@@ -59,6 +67,9 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
   # Get body condition model
   path <- paste0("models/", species, ".rds") 
   model <- readRDS(path)$base_centered
+  if (species == "perch") {
+    model <- readRDS(path)$base
+  }
   gc()
   
   # Get grid from surveyjoin removing species-specific data-sparse areas
@@ -81,9 +92,11 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
     grid <- grid |> filter(lat >= 34)
   }
   
-  # Add time, length, sex. Has to be after the filters!!
-  grid <- expand_grid(grid, year = unique(model$data$year)) |>
+  # Add time, length, sex to grid. Must be after the filters above.
+  yrs <- intersect(unique(model$data$year), unique(biomass_predictions$year)) # AFSC has alternating years for some species
+  grid <- expand_grid(grid, year = yrs) |>
     mutate(length_cm = mean(model$data$length_cm, na.rm = T)) |>
+    mutate(log_length = mean(model$data$log_length, na.rm = T)) |>
     mutate(log_lengthc = mean(model$data$log_lengthc, na.rm=T)) |>
     mutate(region = region)
   if (sex == "F") {
@@ -105,27 +118,21 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
         st_join(biomass_year, join = st_nearest_feature, maxdist = 500)
       joined_grid_list[[as.character(yr)]] <- joined_year}}
   joined_grid <- bind_rows(joined_grid_list)
+  
+  # Set geometry and get the proportion_density weights
   final_grid <- joined_grid |>
     mutate(X = st_coordinates(geometry)[,1] / 1000, # divide to convert m to km because condition model expects km
            Y = st_coordinates(geometry)[,2] / 1000) |>
-    as.data.frame()
-  
-  final_grid <- final_grid |>
+    as.data.frame() |>
     group_by(year) |>
-    mutate(
-      sum_density = sum(density),
-      proportion_density = density / sum_density
-    )
+    mutate(sum_density = sum(density), proportion_density = density / sum_density)
   
-  if (region == "afsc") {
-    final_grid <- final_grid |> select(-depth_m)
-  }
-   
-  message("Predicting body condition on new data and getting weighted average...")
   rm(biomass_predictions, biomass_year, grid, grid_sf, joined_grid, joined_grid_list, joined_year)
   gc()
-  #browser()
-  if (region == "afsc") {
+  
+  # Predict body condition with biomass weights
+  message("Predicting body condition on new data and getting weighted average...")
+  if (region == "test_afsc") { # this if statement probably can be deleted after updating sdmTMB to most recent version
     weighted_condition <- get_index_split(
       model,
       newdata = final_grid,
@@ -140,25 +147,28 @@ get_wa <- function(species = c("arrowtooth", "perch", "shortspine", "dover", "do
     )
   }
   
+  # Calculating lower and upper confidence interval bounds
   z <- qnorm(0.975)
   weighted_condition$lwr <- weighted_condition$est - z * weighted_condition$se_natural
   weighted_condition$upr <- weighted_condition$est + z * weighted_condition$se_natural
   
+  # Adding metadata to indices
   weighted_condition$species <- species
   weighted_condition$region <- region
   
-  rm(e)
+  # Housekeeping
+  if (region == "nwfsc" & species != "shortspine") { rm(e) }
   invisible(gc())
   return(weighted_condition)
 }
 
 # Getting indices for all region/species combinations
 # Github does not want to store the large .rdata files for nwfsc
-# a <- get_wa("arrowtooth", "F", "nwfsc") 
-# b <- get_wa("dover", "F", "nwfsc")
-# c <- get_wa("perch", "F", "nwfsc")
-# d <- get_wa("dogfish", "F", "nwfsc")
-# e <- get_wa("shortspine", "F", "nwfsc")
+a <- get_wa("arrowtooth", "F", "nwfsc")
+b <- get_wa("dover", "F", "nwfsc")
+c <- get_wa("perch", "F", "nwfsc")
+d <- get_wa("dogfish", "F", "nwfsc")
+e <- get_wa("shortspine", "F", "nwfsc")
 
 f <- get_wa("arrowtooth", "F", "pbs")
 g <- get_wa("dover", "F", "pbs")
@@ -172,10 +182,13 @@ m <- get_wa("perch", "F", "afsc")
 n <- get_wa("shortspine", "F", "afsc")
 
 # Saving indices
-# z <- bind_rows(a,b,c,d,e,f,g,h,i,j)
+# z <- bind_rows(a,b,c,d,e,f,g,h,i,j,k,l,m,n)
 # saveRDS(z, "indices.rds")
 # indices <- readRDS("indices.rds")
+```
 
+```{r}
+# Testing if the year*region interaction is useful for prediction. Results: lower AIC values for arrowtooth flounder, dover sole, and pacific ocean perch No difference for pacific spiny dogfish and shortspine thornyhead (AIC diff < 2).
 for (i in unique(indices$species)) {
   subset <- indices |> filter(species == i)
   fit1 <- lm(est ~ year*region, weights = se, data = subset)
@@ -183,15 +196,6 @@ for (i in unique(indices$species)) {
 print(i)
   print(AIC(fit1, fit2))
 }
-
-
-# Ideas for visuals
-ggplot(data = z, aes(x = year, y = est, color = species)) +
-  geom_point() +
-  geom_line() +
-  facet_wrap(~region) +
-  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha=0.3) +
-  theme_minimal()
 
 ```
 
