@@ -433,9 +433,9 @@ indices <- indices |>
          species = fct_recode(species, "Arrowtooth flounder" = "arrowtooth", "Pacific Ocean perch" = "perch", "Dover sole" = "dover", "Pacific spiny dogfish" = "dogfish", "Shortspine thornyhead" = "shortspine")) |>
   group_by(species) |>
   mutate(est_exp = exp(est),
-    est_scaled = est_exp - mean(est_exp),
-         lwr_scaled  = exp(lwr) - mean(est_exp),
-         upr_scaled = exp(upr) - mean(est_exp)) |> 
+    est_scaled = est_exp / mean(est_exp),
+         lwr_scaled  = exp(lwr) / mean(est_exp),
+         upr_scaled = exp(upr) / mean(est_exp)) |> 
   ungroup()
 indices$region <- factor(indices$region, levels = c("Alaska", "Canada", "California Current"))
 
@@ -443,12 +443,12 @@ g <- ggplot(data = indices, aes(x = year, y = est_scaled, color = species)) +
   geom_point() +
   geom_line() +
   facet_wrap(~region) +
-  geom_ribbon(aes(ymin = lwr_scaled, ymax = upr_scaled), alpha=0.3) +
+  geom_ribbon(aes(ymin = lwr_scaled, ymax = upr_scaled), alpha=0.3, show.legend = FALSE) +
   theme_bw() +
-  labs(x = "", y = "Deviation from species \n predicted mean weight (kg)", color = "Species") #Predicted average log(weight)
+  labs(x = "", y = "Weight at length deviation (%)", color = "Species") #Predicted average log(weight)
 
 g
-ggsave("../figures/fig5_indices.png", g, width = 12, height = 6)
+#ggsave("../figures/fig5_indices.png", g, width = 12, height = 6)
 
 ```
 
